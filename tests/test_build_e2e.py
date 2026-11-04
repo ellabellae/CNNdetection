@@ -23,8 +23,8 @@ def _make_sample(tmp: Path, name="S1"):
 def test_tiny_build_writes_valid_bundle(tmp_path):
     sample_dir, ann_dir = _make_sample(tmp_path)
     out = tmp_path / "out"
-    args = B.parse_args(["--models", "random:efficientnet-b0:1", "--images", "S1", "--preprocessings", "raw", "breast_crop",
-                         "--resolutions", "64", "--analytic-resolutions", "64", "128", "--out", str(out),
+    args = B.parse_args(["--models", "random:efficientnet-b0:1", "--images", "S1", "--preprocessings", "raw", "breast_crop", "--always-preprocessings", "raw", "breast_crop",
+                         "--resolutions", "64", "--untrained-resolutions", "64", "--analytic-resolutions", "64", "128", "--out", str(out),
                          "--sample-dir", str(sample_dir), "--annotations-dir", str(ann_dir), "--budget-mb", "5", "--tile", "16"])
     m = B.build(args, log=lambda *a: None)
     assert (out / "manifest.json").exists() and (out / "manifest.js").exists()
@@ -33,7 +33,7 @@ def test_tiny_build_writes_valid_bundle(tmp_path):
     assert model["totals"]["params"] > 0 and "64" in model["analytic"] and "128" in model["analytic"]
     assert model["analytic"]["128"]["macs"] > model["analytic"]["64"]["macs"]
     assert model["receptive_field"]["enc5"]["size"] > model["receptive_field"]["enc1"]["size"]
-    assert len(m["runs"]) == 2    # raw + breast_crop at one resolution
+    assert len(m["runs"]) == 2    # raw + breast_crop at one resolution (breast_crop via --always-preprocessings)
     for r in m["runs"]:
         assert 0 <= r["dice"] <= 1 and r["gt_area_px"] > 0
         for f in list(r["files"].values()) + [s["sprite"] for s in r["stages"]] + list(r["saliency"].values()):
@@ -50,7 +50,7 @@ def test_tiny_build_writes_valid_bundle(tmp_path):
 
 def test_over_budget_bundle_is_refused(tmp_path):
     sample_dir, ann_dir = _make_sample(tmp_path)
-    args = B.parse_args(["--models", "random:efficientnet-b0:1", "--images", "S1", "--preprocessings", "raw", "--resolutions", "64",
+    args = B.parse_args(["--models", "random:efficientnet-b0:1", "--images", "S1", "--preprocessings", "raw", "--resolutions", "64", "--untrained-resolutions", "64",
                          "--analytic-resolutions", "64", "--out", str(tmp_path / "out"), "--sample-dir", str(sample_dir),
                          "--annotations-dir", str(ann_dir), "--budget-mb", "0.001"])
     with pytest.raises(BudgetExceeded):
@@ -63,7 +63,7 @@ def test_clahe_only_sample_runs_only_clahe(tmp_path):
     img = np.full((120, 100), 90, np.uint8); img[40:60, 40:60] = 240
     cv2.imwrite(str(sample_dir / "clahe" / "S2_clahe.png"), img)
     (ann / "S2_AnnotationFile.json").write_text(json.dumps([{"label": "mass", "cgPoints": [{"x": 40, "y": 40}, {"x": 60, "y": 40}, {"x": 60, "y": 60}, {"x": 40, "y": 60}]}]))
-    args = B.parse_args(["--models", "random:efficientnet-b0:1", "--images", "S2", "--resolutions", "64", "--analytic-resolutions", "64",
+    args = B.parse_args(["--models", "random:efficientnet-b0:1", "--images", "S2", "--resolutions", "64", "--untrained-resolutions", "64", "--analytic-resolutions", "64",
                          "--out", str(tmp_path / "out"), "--sample-dir", str(sample_dir), "--annotations-dir", str(ann)])
     m = B.build(args, log=lambda *a: None)
     assert [r["preprocessing"] for r in m["runs"]] == ["clahe_median"]

@@ -62,7 +62,7 @@ def feature_sprite(feat: np.ndarray, k: int = 16, tile: int = 96, cols: int = 8)
         m = feat[ch]
         r, cc = divmod(n, cols)
         sprite[r * tile:(r + 1) * tile, cc * tile:(cc + 1) * tile] = _resize(normalize_u8(m), tile)
-        stats.append({"channel": int(ch), "mean": float(m.mean()), "std": float(m.std()), "sparsity": float((m <= 0).mean()), "max": float(m.max())})
+        stats.append({"channel": int(ch), "mean": float(m.mean()), "std": float(m.std()), "sparsity": float((m <= 0).mean())})
     meta = {"tile": tile, "cols": cols, "rows": rows, "channels_total": int(c), "map_shape": [int(feat.shape[1]), int(feat.shape[2])], "channels": stats}
     return sprite, meta
 

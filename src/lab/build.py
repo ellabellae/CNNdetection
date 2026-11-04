@@ -250,22 +250,34 @@ def build(args: argparse.Namespace, log=print) -> dict:
             arch["timing"][str(res)] = {**T.time_forward(model, x, warmup=2, runs=5), "stages": T.time_stages(model, x, runs=3), "machine": manifest["meta"]["machine"]}
             log(f"  timing {res}: {arch['timing'][str(res)]['median_s'] * 1000:.0f} ms")
         manifest["models"][key] = {**asdict(spec), **arch}
+        model_res = list(args.resolutions) if spec.decoder_trained else [r for r in args.resolutions if r in args.untrained_resolutions]
         for n, v in variants.items():
             for pn, p in v.items():
-                if not args.cross_apply and spec.weights == "checkpoint" and pn != spec.native_preprocessing and pn not in args.always_preprocessings:
+                if not args.cross_apply and pn != spec.native_preprocessing and pn not in args.always_preprocessings:
                     continue
-                for res in args.resolutions:
+                for res in model_res:
                     rel = Path("runs") / key / n / pn / str(res)
                     r = run_one(model, spec, p, n, res, out_dir, rel, args.max_channels, args.tile)
                     manifest["runs"].append(r)
                     log(f"  {n:16s} {pn:13s} {res:4d}  dice={r['dice']:.3f}  pred={r['pred_area_px']:6d}px gt={r['gt_area_px']:6d}px" + ("  MISSED" if r["missed"] else ""))
         del model
 
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=0))
-    (out_dir / "manifest.js").write_text("window.LAB = " + json.dumps(manifest) + ";\n")
+    manifest = _round_floats(manifest)
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+    (out_dir / "manifest.js").write_text("window.LAB = " + json.dumps(manifest, separators=(",", ":")) + ";\n")
     n = bundle.check_budget(out_dir, args.budget_mb)
     log(f"bundle: {n / 1e6:.1f} MB in {out_dir} (budget {args.budget_mb} MB), {len(manifest['runs'])} runs")
     return manifest
+
+
+def _round_floats(o, nd: int = 4):
+    if isinstance(o, float):
+        return round(o, nd)
+    if isinstance(o, dict):
+        return {k: _round_floats(v, nd) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_round_floats(v, nd) for v in o]
+    return o
 
 
 def _adhoc_spec(key: str) -> ModelSpec:
@@ -285,13 +297,14 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--always-preprocessings", nargs="*", default=["raw", "clahe_median"], help="preprocessings every trained model is run on even without --cross-apply")
     ap.add_argument("--cross-apply", action="store_true", help="run every trained model on every preprocessing")
     ap.add_argument("--resolutions", nargs="+", type=int, default=[256, 512])
+    ap.add_argument("--untrained-resolutions", nargs="+", type=int, default=[256], help="resolutions run for models whose decoder is untrained (their masks are noise; one resolution is enough)")
     ap.add_argument("--analytic-resolutions", nargs="+", type=int, default=[256, 512, 1024])
     ap.add_argument("--out", default="docs/lab/data")
     ap.add_argument("--sample-dir", default="data/samples")
     ap.add_argument("--annotations-dir", default=ANNOT_DIR)
     ap.add_argument("--budget-mb", type=float, default=25.0)
-    ap.add_argument("--max-channels", type=int, default=16)
-    ap.add_argument("--tile", type=int, default=96)
+    ap.add_argument("--max-channels", type=int, default=12)
+    ap.add_argument("--tile", type=int, default=64)
     ap.add_argument("--threads", type=int, default=None)
     ap.add_argument("--skip-missing-weights", action="store_true")
     return ap.parse_args(argv)
