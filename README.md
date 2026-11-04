@@ -89,6 +89,10 @@ pip install -r requirements.txt
 python -m src.model_inspect --help   # trace the model, regenerate the explainer data
 ```
 
+## Process
+
+New pieces of work are scoped before they are built using Matt Pocock's [`grill-me`](https://github.com/mattpocock/skills) skill: a structured interview that resolves ambiguity one round at a time, followed by `to-spec`, which turns the agreed answers into a written spec. Specs live in [`docs/specs/`](docs/specs/) and are the contract for each build. Design decisions and open questions are recorded there rather than in chat.
+
 ## AI disclosure
 
 Conceptual planning was done by the team. AI tools (Claude, Gemini) were used for code troubleshooting during the original project and are used for development iteration in this exploratory phase.

@@ -23,6 +23,10 @@ experiments/ One folder per experiment: config.yaml, results.json, short README 
 
 Data and model weights are never committed (see .gitignore). Training runs on Colab GPU; local `.venv` is for CPU development and tests.
 
+## Scoping new work
+
+Before building any new major piece (a tool, a page, an experiment series), run the `grilling` skill (Matt Pocock's `grill-me`) to interview the owner until the design tree is settled, then `to-spec` to write the agreed design to `docs/specs/<slug>.md`. The spec is the contract for the build. Small fixes and routine analysis do not need this.
+
 ## Git workflow
 
 - `main` is always in a presentable state. Work on branches: `feat/…`, `exp/…` (experiments), `chore/…`, `docs/…`, `fix/…`.
