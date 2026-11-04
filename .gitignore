@@ -1,0 +1,18 @@
+# Data (download TOMPEI-CMMD separately; see README)
+data/
+rawData/
+results/
+*.zip
+*.dcm
+*.npy
+*.npz
+*.zarr/
+*.pth
+*.pt
+
+# Notebook / Python noise
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
