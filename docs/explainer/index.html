@@ -1,0 +1,718 @@
+<title>Mammogram U-Net Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the architecture map and the two sandboxes run wider.
+   The page is an engineering drawing of a radiology model: cool film greys, one teal accent
+   for "signal", one amber for "what you are hovering". */
+:root {
+  --bg: #f2f4f7;
+  --surface: #ffffff;
+  --surface-2: #e8ecf1;
+  --fg: #182230;
+  --muted: #5b6676;
+  --line: #cfd6df;
+  --accent: #0e7c74;
+  --accent-soft: #d6efec;
+  --hot: #b4540a;
+  --hot-soft: #fbe6d2;
+  --neg: #2f6fd1;
+  --pos: #d1442f;
+  --on-accent: #ffffff;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #171d24; --surface-2: #1f272f; --fg: #e6ebf0; --muted: #9aa6b4;
+    --line: #2d3741; --accent: #3fc1b5; --accent-soft: #123a37; --hot: #f0a056; --hot-soft: #4a2c10;
+    --neg: #6ea0ff; --pos: #ff7a66; --on-accent: #0f1419; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #171d24; --surface-2: #1f272f; --fg: #e6ebf0; --muted: #9aa6b4;
+  --line: #2d3741; --accent: #3fc1b5; --accent-soft: #123a37; --hot: #f0a056; --hot-soft: #4a2c10;
+  --neg: #6ea0ff; --pos: #ff7a66; --on-accent: #0f1419; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+main { max-width: 1120px; margin: 0 auto; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.9rem, 4vw, 2.8rem); }
+h2 { font-size: 1.5rem; margin-top: 56px; margin-bottom: 8px; }
+h3 { font-size: 1.1rem; margin-top: 24px; margin-bottom: 6px; }
+p { margin: 0 0 12px; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+header { padding-block: 40px 8px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+header p.lede { font-size: 1.1rem; color: var(--muted); max-width: 62ch; margin-top: 10px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 20px; }
+.stat { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; border-radius: 6px; min-width: 0; overflow-wrap: anywhere; }
+.stat .v { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat .v.small { font-size: 0.95rem; line-height: 1.4; padding-top: 6px; }
+.stat .k { color: var(--muted); font-size: 0.8rem; }
+.note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; }
+.note.hot { border-color: var(--hot); background: var(--hot-soft); }
+.map-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; }
+.map-wrap svg { display: block; width: 100%; height: auto; min-width: 640px; font-family: var(--font-mono); }
+.node rect { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; cursor: pointer; transition: fill .15s; }
+.node:hover rect, .node.active rect { fill: var(--accent-soft); stroke: var(--accent); }
+.node text { fill: var(--fg); font-size: 11px; pointer-events: none; }
+.node text.dim { fill: var(--muted); font-size: 10px; }
+.edge { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+.edge.skip { stroke: var(--accent); stroke-dasharray: 5 4; }
+.map-label { fill: var(--muted); font-size: 11px; font-family: var(--font-ui); }
+#detail { margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+#detail h3 { margin-top: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; }
+td.mono, th.mono { font-family: var(--font-mono); }
+.table-wrap { overflow-x: auto; }
+.sandbox { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+@media (max-width: 760px) { .sandbox { grid-template-columns: 1fr; } }
+.controls { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.controls label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.controls select, .controls input[type=range], .controls button { font: inherit; }
+.controls select, .controls button { padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); color: var(--fg); }
+.controls button { cursor: pointer; }
+.controls button:hover { border-color: var(--accent); }
+.seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { flex: 1; border: 0; border-radius: 0; background: var(--surface); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.kernel-edit { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.kernel-edit input { width: 100%; font-family: var(--font-mono); font-size: 0.85rem; padding: 5px 4px; text-align: center; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--fg); }
+.grids { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; min-width: 0; }
+.grid-block { display: flex; flex-direction: column; gap: 6px; }
+.grid-block .cap { font-size: 0.8rem; color: var(--muted); }
+.cells { display: grid; gap: 2px; }
+.cell { width: 30px; height: 30px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 0.62rem; border-radius: 2px; user-select: none; }
+.cell.win { outline: 2px solid var(--hot); outline-offset: -2px; }
+.cell.src { outline: 2px solid var(--hot); outline-offset: -2px; }
+@media (max-width: 480px) { .cell { width: 24px; height: 24px; font-size: 0.5rem; } }
+.formula { font-family: var(--font-mono); font-size: 0.82rem; background: var(--surface-2); border-radius: 6px; padding: 10px 12px; min-height: 64px; white-space: pre-wrap; word-break: break-word; }
+.formula b { color: var(--hot); font-weight: 500; }
+.kernels { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px; }
+.kern { display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); cursor: pointer; }
+.kern canvas { width: 48px; height: 48px; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 3px; }
+.kern:hover canvas, .kern.active canvas { border-color: var(--hot); }
+.bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); font-size: 0.72rem; font-family: var(--font-mono); color: var(--on-accent); }
+.bar span { display: grid; place-items: center; white-space: nowrap; overflow: hidden; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+.mbconv { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font-size: 0.82rem; }
+.step .t { font-weight: 600; }
+.step .m { font-family: var(--font-mono); color: var(--muted); font-size: 0.75rem; }
+.act-plot { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.act-plot canvas { width: 100%; height: auto; display: block; }
+dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; max-width: 80ch; }
+dl.gloss dt { font-weight: 600; }
+dl.gloss dd { margin: 0; color: var(--fg); }
+@media (max-width: 600px) { dl.gloss { grid-template-columns: 1fr; } dl.gloss dd { margin-bottom: 8px; } }
+.filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.filter-row select, .filter-row input { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); }
+button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-visible rect { outline: 2px solid var(--hot); outline-offset: 2px; }
+footer { margin-top: 56px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">CNNdetection · baseline model anatomy</div>
+  <h1>Mammogram U-Net Explorer</h1>
+  <p class="lede">The exact network trained in <code>CNN_tumor.ipynb</code>: a U-Net whose encoder is EfficientNet-B0, taking one 256×256 grayscale mammogram in and producing one 256×256 probability map of "mass" out. Every number on this page was read from the live PyTorch model by <code>src/model_inspect.py</code>.</p>
+  <div class="stats" id="stats"></div>
+</header>
+
+<section>
+  <h2>1. The shape of the network</h2>
+  <div class="prose">
+    <p>A U-Net has two halves. The <strong>encoder</strong> (left side, going down) repeatedly shrinks the image while increasing the number of channels, so each cell of the deepest map summarizes a large patch of breast tissue. The <strong>decoder</strong> (right side, going up) grows the map back to full size. The dashed <strong>skip connections</strong> copy the encoder's higher-resolution maps straight across so the decoder can recover edges that the shrinking lost.</p>
+    <p>Each box is a tensor: <code>channels × height × width</code>. Click a box to see the layers that produce it.</p>
+  </div>
+  <div class="map-wrap"><svg id="map" viewBox="0 0 980 420" role="img" aria-label="U-Net architecture map"></svg></div>
+  <div id="detail"><h3>Select a box above</h3><p class="prose" style="color:var(--muted)">The layer list for that stage will appear here, with kernel size, stride, channel counts and parameter counts.</p></div>
+  <div class="note prose" id="resolution-note"></div>
+</section>
+
+<section>
+  <h2>2. What a convolution does</h2>
+  <div class="prose">
+    <p>A <strong>kernel</strong> is a small grid of numbers, the <strong>weights</strong>. The network slides it over the image. At every position it multiplies each pixel under the kernel by the matching weight and adds the products up. That single sum becomes one output pixel. The same nine weights are reused at every position, which is why a 3×3 kernel on a one-channel image costs only 9 learned numbers no matter how large the image is.</p>
+    <p>Hover an output cell to see which input pixels it came from and the arithmetic. Edit the kernel, or load one of the 32 real first-layer kernels the trained encoder uses.</p>
+  </div>
+  <div class="sandbox">
+    <div class="controls">
+      <label>Kernel preset
+        <select id="preset">
+          <option value="identity">Identity (copies the pixel)</option>
+          <option value="box">Box blur (mean of 3×3)</option>
+          <option value="sobelx">Vertical-edge detector (Sobel x)</option>
+          <option value="lap" selected>Edge detector (Laplacian)</option>
+          <option value="sharpen">Sharpen</option>
+          <option value="stem">Real stem kernel from the model</option>
+        </select>
+      </label>
+      <label id="stem-row" hidden>Stem kernel index <span class="mono" id="stem-idx">0</span>
+        <input type="range" id="stem-slider" min="0" max="31" value="0">
+      </label>
+      <div class="kernel-edit" id="kernel-edit"></div>
+      <label>Stride
+        <div class="seg" id="stride"><button data-v="1" aria-pressed="true">1</button><button data-v="2" aria-pressed="false">2</button></div>
+      </label>
+      <label>Padding
+        <div class="seg" id="pad"><button data-v="1" aria-pressed="true">same (pad 1)</button><button data-v="0" aria-pressed="false">valid (pad 0)</button></div>
+      </label>
+      <label>After the sum
+        <div class="seg" id="act"><button data-v="none" aria-pressed="true">nothing</button><button data-v="relu" aria-pressed="false">ReLU</button><button data-v="silu" aria-pressed="false">SiLU</button></div>
+      </label>
+      <button id="randomize">New input patch</button>
+    </div>
+    <div>
+      <div class="grids">
+        <div class="grid-block"><div class="cap">Input patch · 8×8 pixels (0–255)</div><div class="cells" id="in-grid"></div></div>
+        <div class="grid-block"><div class="cap" id="out-cap">Output</div><div class="cells" id="out-grid"></div></div>
+      </div>
+      <div class="formula" id="formula">Hover an output cell.</div>
+      <div class="legend"><span><i style="background:var(--neg)"></i>negative</span><span><i style="background:#888"></i>zero</span><span><i style="background:var(--pos)"></i>positive</span><span>Output size = ⌊(8 + 2·pad − 3) / stride⌋ + 1</span></div>
+    </div>
+  </div>
+  <div class="note prose">In the real model the first layer, <code>encoder._conv_stem</code>, has 32 kernels like the ones you can load above, each 3×3, applied with <strong>stride 2</strong>. So the very first thing the network does is halve the resolution: 256×256 becomes 128×128, with 32 channels. The pretrained kernels came from ImageNet (colour photos); because our input has one channel instead of three, the library summed the three colour kernels into one.</div>
+</section>
+
+<section>
+  <h2>3. Pooling, and why this network has almost none</h2>
+  <div class="prose">
+    <p><strong>Pooling</strong> shrinks a feature map by summarizing each small window with one number. <strong>Max pooling</strong> keeps the strongest response in the window, <strong>average pooling</strong> keeps the mean. Classic U-Nets use 2×2 max pooling after every stage. Neither has weights; they are fixed rules.</p>
+    <p>EfficientNet makes a different choice. It has <strong>zero pooling layers</strong> in the encoder. It shrinks the map with <strong>stride-2 convolutions</strong> instead, which is a learned way to downsample: the kernel decides what to keep. Pooling appears only once per block, as a <em>global</em> average over the whole map inside the squeeze-and-excitation step (section 5), and the decoder grows the map back with nearest-neighbour interpolation, which is just pixel duplication.</p>
+    <p>Compare the three on the conv sandbox's input patch. Hover an output cell to see its window.</p>
+  </div>
+  <div class="sandbox">
+    <div class="controls">
+      <label>Method
+        <div class="seg" id="pool-method"><button data-v="max" aria-pressed="true">Max 2×2</button><button data-v="avg" aria-pressed="false">Avg 2×2</button><button data-v="conv" aria-pressed="false">Stride-2 conv</button></div>
+      </label>
+      <p style="font-size:.85rem;color:var(--muted);margin:0" id="pool-explain"></p>
+    </div>
+    <div>
+      <div class="grids">
+        <div class="grid-block"><div class="cap">Input patch · 8×8</div><div class="cells" id="pool-in"></div></div>
+        <div class="grid-block"><div class="cap" id="pool-cap">Output · 4×4</div><div class="cells" id="pool-out"></div></div>
+      </div>
+      <div class="formula" id="pool-formula">Hover an output cell.</div>
+    </div>
+  </div>
+  <div class="table-wrap" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Where resolution halves</th><th>Layer</th><th class="mono">Kernel</th><th class="mono">Stride</th><th class="mono">Tensor in → out</th></tr></thead>
+      <tbody id="strided-rows"></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>4. Weights: what the 6.25 million numbers are</h2>
+  <div class="prose">
+    <p>"Weights" means every number the optimizer is allowed to change. For this model that is the kernel values of all 91 convolutions, their biases where present, and the per-channel scale and shift of every BatchNorm. Training (Adam, 20 epochs) nudged all of them to make the Dice score go up.</p>
+  </div>
+  <div class="bar" id="param-bar"></div>
+  <div class="legend" id="param-legend"></div>
+  <div class="prose" style="margin-top:12px">
+    <p>The encoder's 4.0 million weights started from ImageNet pretraining and were fine-tuned. The decoder's 2.2 million started random and were learned entirely from 810 mammograms, which is one reason it is the part most likely to overfit. The segmentation head is a single 3×3 convolution from 16 channels to 1: 16 × 9 + 1 bias = 145 numbers decide the final mask.</p>
+  </div>
+  <h3>The 32 first-layer kernels, as learned</h3>
+  <p class="prose" style="color:var(--muted);font-size:.9rem">Red is positive weight, blue negative. Many look like oriented edge and gradient detectors; a few are near-blurs. Click one to load it into the sandbox above.</p>
+  <div class="kernels" id="kernel-gallery"></div>
+</section>
+
+<section>
+  <h2>5. Inside one encoder block (MBConv)</h2>
+  <div class="prose">
+    <p>EfficientNet-B0 stacks 16 <strong>MBConv</strong> blocks. Each one is the same four-step recipe, and its efficiency comes from splitting a normal convolution into cheap parts. Here is block 1, the one that takes the map from 128×128 down to 64×64, with its real numbers.</p>
+  </div>
+  <div class="mbconv" id="mbconv"></div>
+  <div class="note prose" id="dw-note"></div>
+</section>
+
+<section>
+  <h2>6. Activations: SiLU in the encoder, ReLU in the decoder</h2>
+  <div class="prose">
+    <p>After most convolutions the network applies a fixed nonlinear function to every value. Without it, stacking convolutions would collapse into one big linear filter. <strong>ReLU</strong> zeroes negatives. <strong>SiLU</strong> (also called Swish) is <code>x · sigmoid(x)</code>, a smooth version that lets small negatives through; EfficientNet was designed with it. The sandbox in section 2 lets you apply either to a real convolution output.</p>
+  </div>
+  <div class="act-plot"><canvas id="act-canvas" width="900" height="300"></canvas></div>
+</section>
+
+<section>
+  <h2>7. Every layer</h2>
+  <p class="prose">All 219 leaf modules in execution order. Filter by stage or search by name.</p>
+  <div class="filter-row">
+    <select id="group-filter"><option value="">All stages</option></select>
+    <input id="search" type="search" placeholder="search, e.g. depthwise" aria-label="search layers">
+    <span id="count" style="color:var(--muted);font-size:.85rem"></span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Layer</th><th>Type</th><th class="mono">Kernel</th><th class="mono">Stride</th><th class="mono">Groups</th><th class="mono">In → out (C×H×W)</th><th class="mono">Params</th></tr></thead>
+      <tbody id="layer-rows"></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>8. Glossary</h2>
+  <dl class="gloss">
+    <dt>Kernel / filter</dt><dd>A small grid of weights (3×3, 5×5, or 1×1 here) slid over the input. One kernel produces one output channel.</dd>
+    <dt>Channel</dt><dd>One "layer" of a feature map. The input mammogram has 1; the bottleneck has 320. A conv with C<sub>in</sub> inputs and C<sub>out</sub> outputs has C<sub>out</sub> kernels, each C<sub>in</sub>×k×k.</dd>
+    <dt>Feature map</dt><dd>The tensor a layer outputs: channels × height × width. Early maps respond to edges; deep maps respond to tissue patterns.</dd>
+    <dt>Stride</dt><dd>How far the kernel steps between positions. Stride 2 halves the output size.</dd>
+    <dt>Padding</dt><dd>Zeros added around the border so the kernel can be centered on edge pixels. "Same" padding keeps the size; "valid" shrinks it by k−1.</dd>
+    <dt>Depthwise conv</dt><dd>One k×k kernel per channel, channels never mix. Spatial filtering at a fraction of the cost.</dd>
+    <dt>Pointwise (1×1) conv</dt><dd>Mixes channels at each pixel with no spatial context. 63 of this model's 91 convolutions are 1×1.</dd>
+    <dt>Pooling</dt><dd>Shrinking by taking the max or mean of each window. This encoder uses stride-2 convs instead; the only pooling is global average pooling inside squeeze-and-excitation.</dd>
+    <dt>BatchNorm</dt><dd>Normalizes each channel to zero mean and unit variance over the batch, then applies a learned scale and shift. Stabilizes training.</dd>
+    <dt>Squeeze-and-excitation</dt><dd>Average each channel to one number, pass through two tiny 1×1 convs and a sigmoid, and multiply each channel by the result. Lets the block turn channels up or down depending on the image.</dd>
+    <dt>Skip connection</dt><dd>Concatenating an encoder map onto the decoder map of the same resolution, so fine detail bypasses the bottleneck.</dd>
+    <dt>Receptive field</dt><dd>The patch of input pixels that influences one output value. Grows with depth; at the 8×8 bottleneck each cell sees most of the image.</dd>
+    <dt>Logits, sigmoid, threshold</dt><dd>The head outputs raw scores (logits). Sigmoid maps them to 0–1 probabilities. Pixels above 0.5 become the predicted mask that Dice is computed on.</dd>
+    <dt>Dice</dt><dd>2·|prediction ∩ truth| / (|prediction| + |truth|). 1 is a perfect mask, 0 is no overlap. Insensitive to the huge background, unlike pixel accuracy.</dd>
+  </dl>
+</section>
+
+<footer>
+  Data source: <code>docs/explainer/architecture.json</code>, generated by <code>python -m src.model_inspect</code> against <code>smp.Unet("efficientnet-b0", in_channels=1, classes=1)</code>. Interaction design inspired by <a href="https://poloclub.github.io/cnn-explainer/">CNN Explainer</a> (Polo Club, Georgia Tech).
+</footer>
+</main>
+
+<script src="architecture.js"></script>
+<script>
+(function () {
+  'use strict';
+  var A = window.ARCH;
+  if (!A) { document.getElementById('stats').textContent = 'architecture.js did not load. Run: python -m src.model_inspect'; return; }
+  var S = A.summary, layers = A.layers;
+  var fmt = function (n) { return n.toLocaleString('en-US'); };
+  var shp = function (s) { return s ? s.slice(1).join('×') : '–'; };
+  var cssVar = function (n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+
+  /* ---------- header stats ---------- */
+  var ks = S.kernel_size_histogram;
+  var stats = [
+    [fmt(S.total_params), 'trainable parameters'],
+    [S.conv_layers, 'convolution layers'],
+    [S.depthwise_convs + ' / ' + S.pointwise_convs, 'depthwise / 1×1 convs'],
+    [Object.keys(S.pooling_layers).length ? fmt(Object.values(S.pooling_layers).reduce(function (a, b) { return a + b; }, 0)) : '0', 'pooling layers'],
+    [S.strided_convs.length, 'stride-2 convs (256 → 8 px)'],
+    [Object.keys(ks).map(function (k) { return k.replace('x', '×') + ': ' + ks[k]; }).join(' · '), 'kernel sizes', 'small'],
+  ];
+  document.getElementById('stats').innerHTML = stats.map(function (s) {
+    return '<div class="stat"><div class="v ' + (s[2] || '') + '">' + s[0] + '</div><div class="k">' + s[1] + '</div></div>';
+  }).join('');
+
+  /* ---------- architecture map ---------- */
+  var enc = A.encoder_levels, dec = A.decoder_blocks;
+  var svg = document.getElementById('map');
+  var NS = 'http://www.w3.org/2000/svg';
+  var el = function (tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(e);
+    return e;
+  };
+  var defs = el('defs', {});
+  var marker = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, defs);
+  el('path', { d: 'M0,0 L10,5 L0,10 z', fill: cssVar('--muted') }, marker);
+
+  var W = 980, leftX = 70, rightX = 910, topY = 40, stepY = 58;
+  var boxH = function (hw) { return 14 + Math.log2(hw) * 2.2; };
+  var boxW = function (c) { return 54 + Math.log2(c + 1) * 10; };
+  var nodes = [];
+  // encoder: level i at row i, left column; level 0 is the input image
+  enc.forEach(function (lv, i) {
+    var w = boxW(lv.channels), h = boxH(lv.shape[2]);
+    var x = leftX + i * 28, y = topY + i * stepY;
+    nodes.push({ id: 'enc' + i, kind: 'enc', level: i, x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2, label: lv.channels + '×' + lv.shape[2] + '×' + lv.shape[3], sub: i === 0 ? 'input image' : 'stride ' + lv.stride, group: i === 0 ? null : encGroupsForLevel(i) });
+  });
+  // decoder: block j outputs at row (enc.length-2-j), right column
+  dec.forEach(function (b, j) {
+    var row = enc.length - 2 - j;
+    var w = boxW(b.out_shape[1]), h = boxH(b.out_shape[2]);
+    var x = rightX - w - row * 28, y = topY + row * stepY;
+    nodes.push({ id: 'dec' + j, kind: 'dec', block: j, x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2, label: shp(b.out_shape), sub: 'decoder block ' + j, group: ['decoder.blocks.' + j] });
+  });
+  // head output
+  var out = A.output_shape, hw = boxW(1), hh = boxH(out[2]);
+  nodes.push({ id: 'head', kind: 'head', x: rightX - hw - 0 * 28 - 0, y: topY - 0 - 0 + -0, w: hw, h: hh, cx: 0, cy: 0, label: shp(out), sub: 'logits → sigmoid', group: ['segmentation_head'] });
+  var head = nodes[nodes.length - 1];
+  head.x = rightX - hw + 40; head.y = topY - 10; head.cx = head.x + hw / 2; head.cy = head.y + hh / 2;
+
+  function encGroupsForLevel(level) {
+    // layers whose output spatial size first equals this level's size, in order; group names between the previous level's last conv and this level's last
+    var size = enc[level].shape[2];
+    var groups = [];
+    layers.forEach(function (l) {
+      if (!l.group.indexOf('encoder') === 0) return;
+      if (l.group.indexOf('encoder') !== 0) return;
+      if (l.out_shape && l.out_shape[2] === size && groups.indexOf(l.group) < 0) groups.push(l.group);
+    });
+    return groups;
+  }
+  var byId = {};
+  nodes.forEach(function (n) { byId[n.id] = n; });
+
+  // edges: encoder chain, decoder chain, skips (match decoder block output size to encoder level size)
+  var edges = [];
+  for (var i = 0; i < enc.length - 1; i++) edges.push({ a: 'enc' + i, b: 'enc' + (i + 1), skip: false });
+  edges.push({ a: 'enc' + (enc.length - 1), b: 'dec0', skip: false });
+  for (var j = 0; j < dec.length - 1; j++) edges.push({ a: 'dec' + j, b: 'dec' + (j + 1), skip: false });
+  edges.push({ a: 'dec' + (dec.length - 1), b: 'head', skip: false });
+  dec.forEach(function (b, j) {
+    var size = b.out_shape[2];
+    var li = -1;
+    enc.forEach(function (lv, i) { if (i > 0 && lv.shape[2] === size) li = i; });
+    if (li > 0 && (b.skip_shape || j < dec.length - 1)) edges.push({ a: 'enc' + li, b: 'dec' + j, skip: true, skipShape: b.skip_shape });
+  });
+  edges.forEach(function (e) {
+    var a = byId[e.a], b = byId[e.b];
+    var d;
+    if (e.skip) {
+      d = 'M' + (a.x + a.w) + ',' + a.cy + ' L' + b.x + ',' + b.cy;
+    } else if (a.kind === 'enc' && b.kind === 'enc') {
+      d = 'M' + a.cx + ',' + (a.y + a.h) + ' L' + b.cx + ',' + b.y;
+    } else if (a.kind === 'enc' && b.kind === 'dec') {
+      d = 'M' + (a.x + a.w) + ',' + a.cy + ' C' + (a.x + a.w + 120) + ',' + a.cy + ' ' + (b.x - 120) + ',' + b.cy + ' ' + b.x + ',' + b.cy;
+    } else {
+      d = 'M' + a.cx + ',' + a.y + ' L' + b.cx + ',' + (b.y + b.h);
+    }
+    el('path', { d: d, 'class': 'edge' + (e.skip ? ' skip' : '') });
+  });
+  el('text', { x: leftX, y: 22, 'class': 'map-label' }).textContent = 'ENCODER (EfficientNet-B0) — resolution halves, channels grow';
+  el('text', { x: rightX - 330, y: 22, 'class': 'map-label' }).textContent = 'DECODER — resolution doubles, skips concatenated';
+  el('text', { x: W / 2 - 60, y: topY + (enc.length - 1) * stepY + 46, 'class': 'map-label' }).textContent = 'bottleneck: 8×8 cells, each sees most of the image';
+
+  nodes.forEach(function (n) {
+    var g = el('g', { 'class': 'node', tabindex: '0', role: 'button', 'aria-label': n.sub + ' ' + n.label });
+    el('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }, g);
+    var t = el('text', { x: n.x + 6, y: n.y + 12 }, g); t.textContent = n.label;
+    var t2 = el('text', { x: n.x + 6, y: n.y + n.h - 4, 'class': 'dim' }, g); t2.textContent = n.sub;
+    var show = function () { selectNode(n, g); };
+    g.addEventListener('click', show);
+    g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); show(); } });
+  });
+
+  function selectNode(n, g) {
+    Array.prototype.forEach.call(svg.querySelectorAll('.node'), function (x) { x.classList.remove('active'); });
+    g.classList.add('active');
+    var d = document.getElementById('detail');
+    if (!n.group) {
+      d.innerHTML = '<h3>Input image</h3><p class="prose">One channel, ' + enc[0].shape[2] + '×' + enc[0].shape[3] + ' pixels, scaled to 0–1 by dividing by the image maximum. The original mammogram is 2294×1914, so this is roughly one pixel kept out of every 67.</p>';
+      return;
+    }
+    var rows = layers.filter(function (l) { return n.group.indexOf(l.group) >= 0; });
+    var params = rows.reduce(function (a, l) { return a + l.params; }, 0);
+    var intro = '';
+    if (n.kind === 'dec') {
+      var b = dec[n.block];
+      intro = '<p class="prose">Upsample ×2 by nearest-neighbour (no weights), ' + (b.skip_shape ? 'concatenate the encoder map <code>' + shp(b.skip_shape) + '</code> along the channel axis, ' : 'no skip at this stage, ') + 'then two 3×3 conv + BatchNorm + ReLU. Output <code>' + shp(b.out_shape) + '</code>.</p>';
+    } else if (n.kind === 'head') {
+      intro = '<p class="prose">One 3×3 convolution from 16 channels to 1. The result is a logit per pixel; sigmoid turns it into a probability and the 0.5 threshold into the mask.</p>';
+    } else {
+      intro = '<p class="prose">Stage at stride ' + enc[n.level].stride + ': ' + n.group.length + ' module group' + (n.group.length > 1 ? 's' : '') + ' (' + n.group.join(', ') + ').</p>';
+    }
+    d.innerHTML = '<h3>' + n.sub + ' · ' + n.label + ' · ' + fmt(params) + ' params</h3>' + intro +
+      '<div class="table-wrap"><table><thead><tr><th>Layer</th><th>Type</th><th class="mono">Kernel</th><th class="mono">Stride</th><th class="mono">In → out</th><th class="mono">Params</th></tr></thead><tbody>' +
+      rows.map(rowHtml).join('') + '</tbody></table></div>';
+  }
+  function rowHtml(l) {
+    var type = l.type.replace('Conv2dStaticSamePadding', 'Conv2d');
+    if (l.depthwise) type += ' (depthwise)'; else if (l.pointwise) type += ' (1×1)';
+    return '<tr><td class="mono">' + l.name + '</td><td>' + type + '</td><td class="mono">' + (l.kernel_size ? l.kernel_size.join('×') : '') + '</td><td class="mono">' + (l.stride ? l.stride[0] : '') + '</td><td class="mono">' + shp(l.in_shape) + ' → ' + shp(l.out_shape) + '</td><td class="mono">' + fmt(l.params) + '</td></tr>';
+  }
+
+  document.getElementById('resolution-note').innerHTML =
+    '<strong>Why this matters for Dice.</strong> The input is already 1/67 of the original pixels. By the bottleneck (stride 32) one cell covers an 8×8 block of the 256 input, i.e. roughly a 72×60 pixel block of the original mammogram, about 5 mm of tissue. A small mass survives only through the stride-2 and stride-4 skip connections. That is the mechanical reason the roadmap starts with breast cropping and higher input resolution.';
+
+  /* ---------- strided conv table ---------- */
+  document.getElementById('strided-rows').innerHTML = S.strided_convs.map(function (c, i) {
+    return '<tr><td>' + (i + 1) + '</td><td class="mono">' + c.name + '</td><td class="mono">' + c.kernel_size.join('×') + (c.depthwise ? ' dw' : '') + '</td><td class="mono">' + c.stride[0] + '</td><td class="mono">' + shp(c.in_shape) + ' → ' + shp(c.out_shape) + '</td></tr>';
+  }).join('');
+
+  /* ---------- conv sandbox ---------- */
+  var N = 8, K = 3;
+  var input = [], kernel = [[0, -1, 0], [-1, 4, -1], [0, -1, 0]];
+  var stride = 1, pad = 1, act = 'none';
+  var presets = {
+    identity: [[0, 0, 0], [0, 1, 0], [0, 0, 0]],
+    box: [[1 / 9, 1 / 9, 1 / 9], [1 / 9, 1 / 9, 1 / 9], [1 / 9, 1 / 9, 1 / 9]],
+    sobelx: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+    lap: [[0, -1, 0], [-1, 4, -1], [0, -1, 0]],
+    sharpen: [[0, -1, 0], [-1, 5, -1], [0, -1, 0]],
+  };
+  var seed = 7;
+  function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  function makeInput() {
+    // dark tissue with a bright roundish "mass" and mild noise, like a mammogram patch
+    var cx = 2 + rnd() * 4, cy = 2 + rnd() * 4, r = 1.3 + rnd() * 1.2;
+    input = [];
+    for (var y = 0; y < N; y++) { var row = []; for (var x = 0; x < N; x++) {
+      var d = Math.hypot(x - cx, y - cy);
+      var v = 40 + 60 * rnd() + (d < r ? 150 : d < r + 1 ? 80 : 0);
+      row.push(Math.round(Math.min(255, v)));
+    } input.push(row); }
+  }
+  var inGrid = document.getElementById('in-grid'), outGrid = document.getElementById('out-grid');
+  // Colours are computed as [r,g,b] so the text colour on each cell can be chosen for contrast.
+  function parseColor(c) {
+    c = c.trim();
+    if (c[0] === '#') {
+      var h = c.length === 4 ? c.slice(1).split('').map(function (x) { return x + x; }).join('') : c.slice(1);
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    var m = c.match(/\d+/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
+  }
+  function luma(rgb) {
+    var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]);
+  }
+  function textOn(rgb) { return luma(rgb) > 0.18 ? '#111111' : '#ffffff'; }
+  function rgbStr(rgb) { return 'rgb(' + rgb.join(',') + ')'; }
+  function gray(v) { var g = Math.round(Math.max(0, Math.min(255, v))); return [g, g, g]; }
+  function diverge(v, scale) {
+    var t = Math.max(-1, Math.min(1, v / scale)), a = Math.abs(t);
+    var col = parseColor(cssVar(t < 0 ? '--neg' : '--pos'));
+    return col.map(function (c) { return Math.round(128 * (1 - a) + c * a); });
+  }
+  function applyAct(v) { if (act === 'relu') return Math.max(0, v); if (act === 'silu') return v / (1 + Math.exp(-v)); return v; }
+  function convolve() {
+    var size = Math.floor((N + 2 * pad - K) / stride) + 1, res = [];
+    for (var oy = 0; oy < size; oy++) { var row = []; for (var ox = 0; ox < size; ox++) {
+      var s = 0;
+      for (var ky = 0; ky < K; ky++) for (var kx = 0; kx < K; kx++) {
+        var iy = oy * stride + ky - pad, ix = ox * stride + kx - pad;
+        var px = (iy < 0 || ix < 0 || iy >= N || ix >= N) ? 0 : input[iy][ix];
+        s += px * kernel[ky][kx];
+      }
+      row.push(s);
+    } res.push(row); }
+    return res;
+  }
+  function renderGrid(container, m, colorFn, cls) {
+    container.style.gridTemplateColumns = 'repeat(' + m[0].length + ', auto)';
+    container.innerHTML = '';
+    m.forEach(function (row, y) { row.forEach(function (v, x) {
+      var c = document.createElement('div'); c.className = 'cell ' + (cls || '');
+      var bg = colorFn(v);
+      c.style.background = rgbStr(bg); c.style.color = textOn(bg);
+      c.textContent = Math.abs(v) >= 100 ? Math.round(v) : (Math.round(v * 10) / 10);
+      c.dataset.x = x; c.dataset.y = y; container.appendChild(c);
+    }); });
+  }
+  function renderConv() {
+    var res = convolve();
+    var maxAbs = Math.max(1, Math.max.apply(null, res.map(function (r) { return Math.max.apply(null, r.map(Math.abs)); })));
+    var shown = res.map(function (r) { return r.map(applyAct); });
+    renderGrid(inGrid, input, gray);
+    renderGrid(outGrid, shown, function (v) { return diverge(v, maxAbs); });
+    document.getElementById('out-cap').textContent = 'Output · ' + res.length + '×' + res.length + ' (stride ' + stride + ', pad ' + pad + (act !== 'none' ? ', ' + act.toUpperCase() : '') + ')';
+    Array.prototype.forEach.call(outGrid.children, function (c) {
+      c.addEventListener('mouseenter', function () { showWindow(+c.dataset.x, +c.dataset.y, res); });
+      c.addEventListener('focus', function () { showWindow(+c.dataset.x, +c.dataset.y, res); });
+    });
+    outGrid.addEventListener('mouseleave', clearWindow);
+  }
+  function showWindow(ox, oy, res) {
+    clearWindow();
+    var parts = [];
+    for (var ky = 0; ky < K; ky++) for (var kx = 0; kx < K; kx++) {
+      var iy = oy * stride + ky - pad, ix = ox * stride + kx - pad;
+      var inside = !(iy < 0 || ix < 0 || iy >= N || ix >= N);
+      var px = inside ? input[iy][ix] : 0;
+      if (inside) inGrid.children[iy * N + ix].classList.add('win');
+      var w = kernel[ky][kx];
+      if (w !== 0) parts.push(px + '×' + (Math.round(w * 100) / 100));
+    }
+    outGrid.children[oy * res.length + ox].classList.add('src');
+    var raw = res[oy][ox], after = applyAct(raw);
+    document.getElementById('formula').innerHTML = 'output[' + oy + ',' + ox + '] = ' + (parts.length ? parts.join(' + ') : '0') + ' = <b>' + Math.round(raw * 100) / 100 + '</b>' +
+      (act !== 'none' ? '  →  ' + act.toUpperCase() + ' → <b>' + Math.round(after * 100) / 100 + '</b>' : '') +
+      '\n(' + K * K + ' multiplies and adds per output pixel; the same ' + K * K + ' weights are reused at every position)';
+  }
+  function clearWindow() {
+    Array.prototype.forEach.call(inGrid.children, function (c) { c.classList.remove('win'); });
+    Array.prototype.forEach.call(outGrid.children, function (c) { c.classList.remove('src'); });
+  }
+  var kedit = document.getElementById('kernel-edit');
+  function renderKernelEditor() {
+    kedit.innerHTML = '';
+    for (var y = 0; y < K; y++) for (var x = 0; x < K; x++) {
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'k' + y + x;
+      inp.value = Math.round(kernel[y][x] * 1000) / 1000; inp.setAttribute('aria-label', 'kernel weight ' + y + ',' + x);
+      (function (yy, xx, node) { node.addEventListener('change', function () { var v = parseFloat(node.value); if (!isNaN(v)) { kernel[yy][xx] = v; renderConv(); } }); })(y, x, inp);
+      kedit.appendChild(inp);
+    }
+  }
+  function setKernel(k) { kernel = k.map(function (r) { return r.slice(); }); renderKernelEditor(); renderConv(); }
+  var stemK = A.stem_kernels.kernels;
+  function loadStem(i) { setKernel(stemK[i][0]); document.getElementById('stem-idx').textContent = i; markGallery(i); }
+  document.getElementById('preset').addEventListener('change', function (e) {
+    var v = e.target.value; document.getElementById('stem-row').hidden = v !== 'stem';
+    if (v === 'stem') loadStem(+document.getElementById('stem-slider').value); else { setKernel(presets[v]); markGallery(-1); }
+  });
+  document.getElementById('stem-slider').addEventListener('input', function (e) { loadStem(+e.target.value); });
+  function segment(id, cb) {
+    var box = document.getElementById(id);
+    Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () {
+        Array.prototype.forEach.call(box.querySelectorAll('button'), function (o) { o.setAttribute('aria-pressed', 'false'); });
+        b.setAttribute('aria-pressed', 'true'); cb(b.dataset.v);
+      });
+    });
+  }
+  segment('stride', function (v) { stride = +v; renderConv(); });
+  segment('pad', function (v) { pad = +v; renderConv(); });
+  segment('act', function (v) { act = v; renderConv(); });
+  document.getElementById('randomize').addEventListener('click', function () { makeInput(); renderConv(); renderPool(); });
+
+  /* ---------- pooling sandbox ---------- */
+  var poolMethod = 'max';
+  var poolIn = document.getElementById('pool-in'), poolOut = document.getElementById('pool-out');
+  var poolExplain = {
+    max: 'Keeps the largest value in each 2×2 window. No weights. Bright specks survive, which suits calcifications but also noise.',
+    avg: 'Keeps the mean of each 2×2 window. No weights. Smooths, and small bright specks fade.',
+    conv: 'A 3×3 kernel (the one in the sandbox above) applied at stride 2. The kernel is learned, so the network decides what survives the halving. This is what EfficientNet does five times.',
+  };
+  function pool() {
+    var size = N / 2, res = [];
+    if (poolMethod === 'conv') {
+      var s = stride, p = pad; stride = 2; pad = 1; var r = convolve(); stride = s; pad = p; return r;
+    }
+    for (var oy = 0; oy < size; oy++) { var row = []; for (var ox = 0; ox < size; ox++) {
+      var vals = [input[2 * oy][2 * ox], input[2 * oy][2 * ox + 1], input[2 * oy + 1][2 * ox], input[2 * oy + 1][2 * ox + 1]];
+      row.push(poolMethod === 'max' ? Math.max.apply(null, vals) : (vals[0] + vals[1] + vals[2] + vals[3]) / 4);
+    } res.push(row); }
+    return res;
+  }
+  function renderPool() {
+    var res = pool();
+    renderGrid(poolIn, input, gray);
+    if (poolMethod === 'conv') {
+      var maxAbs = Math.max(1, Math.max.apply(null, res.map(function (r) { return Math.max.apply(null, r.map(Math.abs)); })));
+      renderGrid(poolOut, res, function (v) { return diverge(v, maxAbs); });
+    } else renderGrid(poolOut, res, gray);
+    document.getElementById('pool-cap').textContent = 'Output · ' + res.length + '×' + res.length;
+    document.getElementById('pool-explain').textContent = poolExplain[poolMethod];
+    Array.prototype.forEach.call(poolOut.children, function (c) {
+      c.addEventListener('mouseenter', function () { showPoolWindow(+c.dataset.x, +c.dataset.y, res); });
+    });
+    poolOut.addEventListener('mouseleave', function () { Array.prototype.forEach.call(poolIn.children, function (c) { c.classList.remove('win'); }); });
+  }
+  function showPoolWindow(ox, oy, res) {
+    Array.prototype.forEach.call(poolIn.children, function (c) { c.classList.remove('win'); });
+    var vals = [];
+    if (poolMethod === 'conv') {
+      for (var ky = 0; ky < K; ky++) for (var kx = 0; kx < K; kx++) { var iy = oy * 2 + ky - 1, ix = ox * 2 + kx - 1; if (iy >= 0 && ix >= 0 && iy < N && ix < N) poolIn.children[iy * N + ix].classList.add('win'); }
+      document.getElementById('pool-formula').innerHTML = 'output[' + oy + ',' + ox + '] = Σ pixel × weight over the 3×3 window = <b>' + Math.round(res[oy][ox] * 100) / 100 + '</b>  (window centre steps by 2)';
+      return;
+    }
+    for (var dy = 0; dy < 2; dy++) for (var dx = 0; dx < 2; dx++) { var y = oy * 2 + dy, x = ox * 2 + dx; poolIn.children[y * N + x].classList.add('win'); vals.push(input[y][x]); }
+    document.getElementById('pool-formula').innerHTML = (poolMethod === 'max' ? 'max' : 'mean') + '(' + vals.join(', ') + ') = <b>' + Math.round(res[oy][ox] * 100) / 100 + '</b>';
+  }
+  segment('pool-method', function (v) { poolMethod = v; renderPool(); });
+
+  /* ---------- weights ---------- */
+  var parts = [['encoder (pretrained, fine-tuned)', S.encoder_params, cssVar('--accent')], ['decoder (learned from scratch)', S.decoder_params, cssVar('--hot')], ['head', S.head_params, cssVar('--muted')]];
+  document.getElementById('param-bar').innerHTML = parts.map(function (p) {
+    var pct = 100 * p[1] / S.total_params;
+    return '<span style="width:' + pct + '%;background:' + p[2] + '">' + (pct > 8 ? fmt(p[1]) : '') + '</span>';
+  }).join('');
+  document.getElementById('param-legend').innerHTML = parts.map(function (p) {
+    return '<span><i style="background:' + p[2] + '"></i>' + p[0] + ': ' + fmt(p[1]) + ' (' + (100 * p[1] / S.total_params).toFixed(1) + '%)</span>';
+  }).join('');
+
+  var gallery = document.getElementById('kernel-gallery');
+  var maxAbsAll = Math.max.apply(null, stemK.map(function (k) { return Math.max.apply(null, k[0].map(function (r) { return Math.max.apply(null, r.map(Math.abs)); })); }));
+  stemK.forEach(function (k, i) {
+    var wrap = document.createElement('div'); wrap.className = 'kern'; wrap.setAttribute('role', 'button'); wrap.tabIndex = 0; wrap.id = 'kern-' + i;
+    var cv = document.createElement('canvas'); cv.width = 3; cv.height = 3;
+    var ctx = cv.getContext('2d');
+    for (var y = 0; y < 3; y++) for (var x = 0; x < 3; x++) { ctx.fillStyle = rgbStr(diverge(k[0][y][x], maxAbsAll)); ctx.fillRect(x, y, 1, 1); }
+    wrap.appendChild(cv); var lab = document.createElement('span'); lab.textContent = '#' + i; wrap.appendChild(lab);
+    var pick = function () { document.getElementById('preset').value = 'stem'; document.getElementById('stem-row').hidden = false; document.getElementById('stem-slider').value = i; loadStem(i); document.getElementById('kernel-edit').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+    wrap.addEventListener('click', pick);
+    wrap.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } });
+    gallery.appendChild(wrap);
+  });
+  function markGallery(i) { Array.prototype.forEach.call(gallery.children, function (c, j) { c.classList.toggle('active', j === i); }); }
+
+  /* ---------- MBConv block 1 ---------- */
+  var b1 = layers.filter(function (l) { return l.group === 'encoder._blocks.1'; });
+  var find = function (suffix) { return b1.filter(function (l) { return l.name.endsWith(suffix); })[0]; };
+  var ex = find('_expand_conv'), dw = find('_depthwise_conv'), ser = find('_se_reduce'), see = find('_se_expand'), pr = find('_project_conv');
+  var steps = [
+    ['1 · Expand (1×1 conv)', ex, 'Mix channels, widen ' + ex.in_shape[1] + ' → ' + ex.out_shape[1] + '. No spatial context.'],
+    ['2 · Depthwise ' + dw.kernel_size.join('×') + ', stride ' + dw.stride[0], dw, 'One ' + dw.kernel_size.join('×') + ' kernel per channel. This is where resolution halves: ' + shp(dw.in_shape) + ' → ' + shp(dw.out_shape) + '.'],
+    ['3 · Squeeze-and-excite', null, 'Global average pool each channel to 1 number, 1×1 conv ' + ser.in_shape[1] + ' → ' + ser.out_shape[1] + ', SiLU, 1×1 conv back to ' + see.out_shape[1] + ', sigmoid, multiply channels by the result.'],
+    ['4 · Project (1×1 conv)', pr, 'Mix channels, narrow ' + pr.in_shape[1] + ' → ' + pr.out_shape[1] + '. BatchNorm after, no activation.'],
+  ];
+  document.getElementById('mbconv').innerHTML = steps.map(function (s) {
+    var p = s[1] ? s[1].params : ser.params + see.params;
+    return '<div class="step"><div class="t">' + s[0] + '</div><div class="m">' + fmt(p) + ' params</div><div>' + s[2] + '</div></div>';
+  }).join('');
+  var fullCost = dw.in_shape[1] * dw.out_shape[1] * dw.kernel_size[0] * dw.kernel_size[1];
+  document.getElementById('dw-note').innerHTML = '<strong>Why depthwise is cheap.</strong> A normal ' + dw.kernel_size.join('×') + ' convolution from ' + dw.in_shape[1] + ' to ' + dw.out_shape[1] + ' channels would need ' + dw.in_shape[1] + ' × ' + dw.out_shape[1] + ' × ' + dw.kernel_size[0] * dw.kernel_size[1] + ' = ' + fmt(fullCost) + ' weights. The depthwise version needs ' + dw.in_shape[1] + ' × ' + dw.kernel_size[0] * dw.kernel_size[1] + ' = ' + fmt(dw.params) + ', about ' + Math.round(fullCost / dw.params) + '× fewer, and the 1×1 convs around it do the channel mixing. That trade is the whole idea behind EfficientNet, and it is why the encoder has 4.0M parameters rather than 20M+ for a classic U-Net of the same depth.';
+
+  /* ---------- activation plot ---------- */
+  (function () {
+    var cv = document.getElementById('act-canvas'), ctx = cv.getContext('2d');
+    var W = cv.width, H = cv.height, pad = 36;
+    var xmin = -5, xmax = 5, ymin = -1.2, ymax = 5;
+    var X = function (x) { return pad + (x - xmin) / (xmax - xmin) * (W - 2 * pad); };
+    var Y = function (y) { return H - pad - (y - ymin) / (ymax - ymin) * (H - 2 * pad); };
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = cssVar('--line'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(xmin), Y(0)); ctx.lineTo(X(xmax), Y(0)); ctx.moveTo(X(0), Y(ymin)); ctx.lineTo(X(0), Y(ymax)); ctx.stroke();
+    ctx.fillStyle = cssVar('--muted'); ctx.font = '13px ' + cssVar('--font-mono');
+    [-4, -2, 2, 4].forEach(function (t) { ctx.fillText(t, X(t) - 6, Y(0) + 16); });
+    [1, 2, 3, 4].forEach(function (t) { ctx.fillText(t, X(0) - 18, Y(t) + 4); });
+    var curves = [['ReLU: max(0, x)', cssVar('--hot'), function (x) { return Math.max(0, x); }], ['SiLU: x·sigmoid(x)', cssVar('--accent'), function (x) { return x / (1 + Math.exp(-x)); }]];
+    curves.forEach(function (c, i) {
+      ctx.strokeStyle = c[1]; ctx.lineWidth = 2.5; ctx.beginPath();
+      for (var x = xmin; x <= xmax; x += 0.02) { var px = X(x), py = Y(c[2](x)); if (x === xmin) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+      ctx.stroke();
+      ctx.fillStyle = c[1]; ctx.font = '600 14px ' + cssVar('--font-ui'); ctx.fillText(c[0], pad + 8, pad + 18 + i * 20);
+    });
+    ctx.fillStyle = cssVar('--muted'); ctx.font = '12px ' + cssVar('--font-ui');
+    ctx.fillText('SiLU dips slightly below zero for small negative x, then follows ReLU', pad + 8, H - 8);
+  })();
+
+  /* ---------- full layer table ---------- */
+  var groups = [];
+  layers.forEach(function (l) { if (groups.indexOf(l.group) < 0) groups.push(l.group); });
+  var gf = document.getElementById('group-filter');
+  groups.forEach(function (g) { var o = document.createElement('option'); o.value = g; o.textContent = g; gf.appendChild(o); });
+  var rowsEl = document.getElementById('layer-rows'), search = document.getElementById('search');
+  function renderTable() {
+    var g = gf.value, q = search.value.toLowerCase();
+    var rows = layers.filter(function (l) { return (!g || l.group === g) && (!q || (l.name + ' ' + l.type + (l.depthwise ? ' depthwise' : '') + (l.pointwise ? ' pointwise 1x1' : '')).toLowerCase().indexOf(q) >= 0); });
+    rowsEl.innerHTML = rows.map(function (l) {
+      var type = l.type.replace('Conv2dStaticSamePadding', 'Conv2d'); if (l.depthwise) type += ' (depthwise)'; else if (l.pointwise) type += ' (1×1)';
+      return '<tr><td class="mono">' + l.order + '</td><td class="mono">' + l.name + '</td><td>' + type + '</td><td class="mono">' + (l.kernel_size ? l.kernel_size.join('×') : '') + '</td><td class="mono">' + (l.stride ? l.stride[0] : '') + '</td><td class="mono">' + (l.groups || '') + '</td><td class="mono">' + shp(l.in_shape) + ' → ' + shp(l.out_shape) + '</td><td class="mono">' + fmt(l.params) + '</td></tr>';
+    }).join('');
+    document.getElementById('count').textContent = rows.length + ' of ' + layers.length + ' modules';
+  }
+  gf.addEventListener('change', renderTable); search.addEventListener('input', renderTable);
+
+  /* ---------- boot ---------- */
+  makeInput(); renderKernelEditor(); renderConv(); renderPool(); renderTable();
+  // open the bottleneck by default so the detail panel is not empty
+  var bn = svg.querySelectorAll('.node')[enc.length - 1]; if (bn) bn.dispatchEvent(new Event('click'));
+})();
+</script>
