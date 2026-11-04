@@ -1,0 +1,14 @@
+torch
+torchvision
+segmentation-models-pytorch
+timm
+torchinfo
+numpy
+opencv-python-headless
+scikit-image
+scikit-learn
+scipy
+matplotlib
+pandas
+tqdm
+pyyaml

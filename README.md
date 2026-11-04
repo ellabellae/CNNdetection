@@ -11,7 +11,7 @@ The approach is to apply open-source models, investigate CNN architecture and tr
 
 This started as a BME 303 (Imaging and Diagnostics, Duke) final project by Ella Etchandy, Paul Fong, and Ella Fortenbery, presented April 24, 2026 ([slides](https://docs.google.com/presentation/d/164Fi7TkFQRbLIuP3z_y9shHJBSYE3Jp7heBpFcq061U/edit?usp=sharing)). The original question was whether classical preprocessing (median filter + CLAHE, or PCA) changes how well a CNN segments masses.
 
-**Baseline** (`CNN_tumor.ipynb`): U-Net with an ImageNet-pretrained EfficientNet-B0 encoder (`segmentation_models_pytorch`), 256x256 inputs, BCE loss, Adam at 1e-3, batch size 4, 20 epochs, 80/20 image-level split on 1013 images.
+**Baseline** ([`notebooks/CNN_tumor.ipynb`](notebooks/CNN_tumor.ipynb)): U-Net with an ImageNet-pretrained EfficientNet-B0 encoder (`segmentation_models_pytorch`), 256x256 inputs, BCE loss, Adam at 1e-3, batch size 4, 20 epochs, 80/20 image-level split on 1013 images.
 
 | Preprocessing   | Dice  | IoU   |
 |-----------------|-------|-------|
@@ -21,6 +21,22 @@ This started as a BME 303 (Imaging and Diagnostics, Duke) final project by Ella 
 
 CLAHE + median and PCA both beat raw (paired t-test, p < 0.01); they were not significantly different from each other.
 
+### Baseline results
+
+![Test-set Dice, IoU and pixel accuracy for the three preprocessing conditions](docs/figures/test_metrics_bar_chart.png)
+
+*Mean test-set scores (n = 203). Pixel accuracy is near 1.0 for every model because ~99% of pixels are background; Dice and IoU are the informative metrics.*
+
+![Per-image Dice and IoU distributions](docs/figures/dice_iou_boxplots.png)
+
+*Per-image distributions. The wide spread, with many images near zero, is the main thing to fix: the models either find the mass or miss it entirely.*
+
+![Qualitative predictions on three test images](docs/figures/qualitative_predictions.png)
+
+*Three test images. At 256x256 a mass can be only a few pixels wide (middle row), and each model finds some masses and misses others, which motivates breast-region cropping and higher-resolution inputs.*
+
+More figures (preprocessing comparisons, histograms, training curves) are in [`docs/figures/`](docs/figures/).
+
 ## Dataset
 
 [TOMPEI-CMMD](https://www.cancerimagingarchive.net/analysis-result/tompei-cmmd/) (The Cancer Imaging Archive, CC BY 4.0): MLO-view mammograms from the CMMD collection with JSON polygon annotations for masses, calcifications, and other findings. Images were converted from DICOM to 8-bit PNG (2294x1914) for this project.
@@ -29,9 +45,16 @@ The data is **not** in this repo. Download it from TCIA and set the Drive paths 
 
 > Kashiwada, Y., Takaya, E., Hiroya, M., Matsuda, N., Yashima, T., Kobayashi, T., Tamiya, G., & Ueda, T. (2025). TOMPEI-CMMD Dataset (Version 1) [Dataset]. The Cancer Imaging Archive. https://doi.org/10.7937/WEZW-BH22
 
-## Contents
+## Repository layout
 
-- `CNN_tumor.ipynb` — the full baseline pipeline (Colab): unpack data, build masks from JSON, preprocess, train three models, evaluate (Dice / IoU / pixel accuracy), statistics, figures.
+```
+notebooks/   Colab notebooks (baseline pipeline, with outputs)
+src/         Reusable Python modules (data packaging, models, training, evaluation, visualization)
+docs/        Figures, experiment log, interactive CNN explainer
+experiments/ One folder per experiment (config + results, no data or weights)
+```
+
+See [`CLAUDE.md`](CLAUDE.md) for the working agreement (git workflow, scientific standards, roadmap).
 
 ## Roadmap
 
@@ -45,7 +68,14 @@ Planned experiments, roughly in order:
 
 ## Running
 
-Open the notebook in Google Colab with a GPU runtime, mount Drive, set `rawDataFolderPath` / `resultsFolderPath`, and run top to bottom. Cells marked OPTIONAL save intermediate files and are slow.
+**Training (Colab):** open the notebook with a GPU runtime, mount Drive, set `rawDataFolderPath` / `resultsFolderPath`, and run top to bottom. Cells marked OPTIONAL save intermediate files and are slow.
+
+**Local development (CPU):**
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
 
 ## AI disclosure
 
