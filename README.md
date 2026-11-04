@@ -37,6 +37,17 @@ CLAHE + median and PCA both beat raw (paired t-test, p < 0.01); they were not si
 
 More figures (preprocessing comparisons, histograms, training curves) are in [`docs/figures/`](docs/figures/).
 
+### Inside the network
+
+[`docs/explainer/`](docs/explainer/) is an interactive explainer of the exact model trained here (U-Net with EfficientNet-B0 encoder): click through the architecture, slide real learned kernels over a tissue patch, compare max/average pooling with stride-2 convolution, and browse all 219 layers. The numbers behind it are traced from the live model by `python -m src.model_inspect`:
+
+| | |
+|---|---|
+| Trainable parameters | 6,250,893 (encoder 4.0M pretrained, decoder 2.2M from scratch, head 145) |
+| Convolutions | 91 (16 depthwise, 63 pointwise 1×1; kernels 3×3, 5×5, 1×1) |
+| Pooling layers | 0 (downsampling is five stride-2 convolutions, 256 → 8 px) |
+| Activations | SiLU in the encoder, ReLU in the decoder |
+
 ## Dataset
 
 [TOMPEI-CMMD](https://www.cancerimagingarchive.net/analysis-result/tompei-cmmd/) (The Cancer Imaging Archive, CC BY 4.0): MLO-view mammograms from the CMMD collection with JSON polygon annotations for masses, calcifications, and other findings. Images were converted from DICOM to 8-bit PNG (2294x1914) for this project.
@@ -49,8 +60,8 @@ The data is **not** in this repo. Download it from TCIA and set the Drive paths 
 
 ```
 notebooks/   Colab notebooks (baseline pipeline, with outputs)
-src/         Reusable Python modules (data packaging, models, training, evaluation, visualization)
-docs/        Figures, experiment log, interactive CNN explainer
+src/         Reusable Python modules (model_inspect.py so far; data, training, evaluation to come)
+docs/        Figures, experiment log (EXPERIMENTS.md), interactive CNN explainer (explainer/)
 experiments/ One folder per experiment (config + results, no data or weights)
 ```
 
@@ -75,6 +86,7 @@ Planned experiments, roughly in order:
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python -m src.model_inspect --help   # trace the model, regenerate the explainer data
 ```
 
 ## AI disclosure
