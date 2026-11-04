@@ -1,6 +1,6 @@
 # Spec: Architecture Lab
 
-Status: **draft for review** · Scoped 2026-11-04 via `grill-me` (two rounds, Q1–Q18 all accepted) · Owner: Ella Etchandy
+Status: **approved 2026-11-04** · Scoped 2026-11-04 via `grill-me` (two rounds, Q1–Q18 all accepted) · Owner: Ella Etchandy
 
 ## Problem Statement
 
