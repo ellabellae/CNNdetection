@@ -1,0 +1,697 @@
+<title>Mammogram Architecture Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky tab bar over one wide working column. Film greys, teal for signal, amber for the thing under your cursor. */
+:root {
+  --bg: #f2f4f7; --surface: #ffffff; --surface-2: #e8ecf1; --fg: #182230; --muted: #5b6676; --line: #cfd6df;
+  --accent: #0e7c74; --accent-soft: #d6efec; --hot: #b4540a; --hot-soft: #fbe6d2; --neg: #2f6fd1; --pos: #d1442f;
+  --gt: #19a36a; --pred: #d1442f; --on-accent: #ffffff;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #171d24; --surface-2: #1f272f; --fg: #e6ebf0; --muted: #9aa6b4; --line: #2d3741;
+    --accent: #3fc1b5; --accent-soft: #123a37; --hot: #f0a056; --hot-soft: #4a2c10; --neg: #6ea0ff; --pos: #ff7a66;
+    --gt: #3ddc97; --pred: #ff7a66; --on-accent: #0f1419; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #171d24; --surface-2: #1f272f; --fg: #e6ebf0; --muted: #9aa6b4; --line: #2d3741;
+  --accent: #3fc1b5; --accent-soft: #123a37; --hot: #f0a056; --hot-soft: #4a2c10; --neg: #6ea0ff; --pos: #ff7a66;
+  --gt: #3ddc97; --pred: #ff7a66; --on-accent: #0f1419; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+main { max-width: 1200px; margin: 0 auto; }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.7rem, 3.5vw, 2.4rem); }
+h2 { font-size: 1.35rem; margin: 32px 0 8px; }
+h3 { font-size: 1.05rem; margin: 18px 0 6px; }
+p { margin: 0 0 10px; }
+.prose { max-width: 70ch; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+.eyebrow { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+header { padding-block: 28px 10px; }
+header .lede { color: var(--muted); max-width: 70ch; margin-top: 6px; }
+.metaline { font-size: 0.8rem; color: var(--muted); font-family: var(--font-mono); margin-top: 6px; }
+nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; gap: 2px; overflow-x: auto; margin-top: 12px; }
+nav.tabs button { font: inherit; font-weight: 500; background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+nav.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+section.tab[hidden] { display: none; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.ctl { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--muted); min-width: 0; }
+.ctl select, .ctl input, .ctl button { font: inherit; font-size: 0.9rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg); max-width: 100%; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { font: inherit; font-size: 0.85rem; padding: 6px 10px; border: 0; background: var(--surface); color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-top: 12px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stat { background: var(--surface-2); border-radius: 6px; padding: 10px 12px; min-width: 0; overflow-wrap: anywhere; }
+.stat .v { font-family: var(--font-mono); font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.stat .v.small { font-size: 0.9rem; line-height: 1.4; padding-top: 4px; }
+.stat .k { color: var(--muted); font-size: 0.75rem; }
+.badge { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: .03em; padding: 2px 8px; border-radius: 999px; background: var(--hot-soft); color: var(--fg); border: 1px solid var(--hot); vertical-align: middle; }
+.badge.ok { background: var(--accent-soft); border-color: var(--accent); }
+.note { background: var(--accent-soft); border: 1px solid var(--line); padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
+.note.hot { background: var(--hot-soft); }
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); }
+.table-wrap { overflow-x: auto; }
+canvas.view { width: 100%; max-width: 100%; height: auto; display: block; border-radius: 4px; background: #000; image-rendering: auto; }
+.views { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.view-block { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.view-block .cap { font-size: 0.78rem; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 0.78rem; font-family: var(--font-mono); padding: 4px 8px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.chip.enc { border-left: 3px solid var(--neg); } .chip.dec { border-left: 3px solid var(--pos); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.tile { display: flex; flex-direction: column; gap: 2px; font-size: 0.68rem; font-family: var(--font-mono); color: var(--muted); }
+.tile canvas { width: 100%; height: auto; aspect-ratio: 1; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 3px; cursor: crosshair; }
+.tile canvas:hover { border-color: var(--hot); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+.bars { display: flex; flex-direction: column; gap: 4px; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr 90px; gap: 8px; align-items: center; font-size: 0.8rem; }
+.bar-row .mono { text-align: right; }
+.bar-track { height: 14px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; background: var(--accent); }
+.bar-fill.dec { background: var(--hot); }
+@media (max-width: 600px) { .bar-row { grid-template-columns: 100px 1fr 70px; } }
+.map-wrap { overflow-x: auto; }
+.map-wrap svg { display: block; width: 100%; height: auto; min-width: 640px; font-family: var(--font-mono); }
+.node rect { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; cursor: pointer; }
+.node:hover rect, .node.active rect { fill: var(--accent-soft); stroke: var(--accent); }
+.node text { fill: var(--fg); font-size: 11px; pointer-events: none; }
+.node text.dim { fill: var(--muted); font-size: 10px; }
+.edge { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+.edge.skip { stroke: var(--accent); stroke-dasharray: 5 4; }
+.map-label { fill: var(--muted); font-size: 11px; font-family: var(--font-ui); }
+.kernels { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+.kern { display: flex; flex-direction: column; align-items: center; gap: 3px; font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); cursor: pointer; }
+.kern canvas { width: 46px; height: 46px; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 3px; }
+.kern:hover canvas, .kern.active canvas { border-color: var(--hot); }
+.sandbox { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .sandbox { grid-template-columns: 1fr; } }
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.kernel-edit { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.kernel-edit input { width: 100%; font-family: var(--font-mono); font-size: 0.82rem; padding: 5px 4px; text-align: center; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--fg); }
+.grids { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.cells { display: grid; gap: 2px; }
+.cell { width: 28px; height: 28px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 0.6rem; border-radius: 2px; user-select: none; }
+.cell.win, .cell.src { outline: 2px solid var(--hot); outline-offset: -2px; }
+@media (max-width: 480px) { .cell { width: 22px; height: 22px; font-size: 0.5rem; } }
+.formula { font-family: var(--font-mono); font-size: 0.8rem; background: var(--surface-2); border-radius: 6px; padding: 8px 10px; min-height: 52px; white-space: pre-wrap; word-break: break-word; margin-top: 8px; }
+.formula b { color: var(--hot); font-weight: 500; }
+dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; max-width: 86ch; }
+dl.gloss dt { font-weight: 600; } dl.gloss dd { margin: 0; }
+@media (max-width: 600px) { dl.gloss { grid-template-columns: 1fr; } dl.gloss dd { margin-bottom: 8px; } }
+.slider { display: flex; align-items: center; gap: 10px; }
+.slider input { width: 180px; }
+.hint { font-size: 0.8rem; color: var(--muted); }
+button:focus-visible, select:focus-visible, input:focus-visible, .node:focus-visible rect, .chip:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+footer { margin-top: 48px; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">CNNdetection · evaluate models and preprocessing without a GPU</div>
+  <h1>Mammogram Architecture Lab</h1>
+  <p class="lede">Open up a mass-segmentation network, run it on real mammograms, and watch what every stage does. Everything here was precomputed on a laptop CPU by <code>python -m src.lab.build</code>; swap in your own checkpoint or images and rebuild in minutes.</p>
+  <div class="metaline" id="metaline">loading manifest…</div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Lab sections">
+  <button role="tab" data-tab="anatomy" aria-selected="true">Anatomy</button>
+  <button role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
+  <button role="tab" data-tab="compare" aria-selected="false">Compare</button>
+  <button role="tab" data-tab="compute" aria-selected="false">Compute</button>
+  <button role="tab" data-tab="glossary" aria-selected="false">Glossary</button>
+</nav>
+
+<!-- ============================ ANATOMY ============================ -->
+<section class="tab" id="tab-anatomy">
+  <div class="row" style="margin-top:14px">
+    <label class="ctl">Model <select id="an-model"></select></label>
+  </div>
+  <div class="stats" id="an-stats" style="margin-top:12px"></div>
+  <h2>The shape of the network</h2>
+  <p class="prose">Each box is a tensor, <code>channels × height × width</code>. The encoder (left, going down) shrinks the image and grows the channels; the decoder (right, going up) rebuilds a full-size map; dashed skip connections copy encoder maps across so edges survive the bottleneck. Click a box to list its layers.</p>
+  <div class="panel map-wrap"><svg id="an-map" viewBox="0 0 980 420" role="img" aria-label="architecture map"></svg></div>
+  <div class="panel" id="an-detail"><h3>Select a box</h3></div>
+  <div class="note prose" id="an-rfnote"></div>
+
+  <h2>What a convolution does</h2>
+  <p class="prose">A kernel is a small grid of weights slid over the image; each output pixel is the weighted sum of the pixels under it. Hover an output cell to see the arithmetic. Load one of the model's real first-layer kernels, or edit the numbers.</p>
+  <div class="panel sandbox">
+    <div class="controls">
+      <label class="ctl">Kernel preset
+        <select id="preset">
+          <option value="identity">Identity</option><option value="box">Box blur</option><option value="sobelx">Vertical-edge (Sobel x)</option>
+          <option value="lap" selected>Edge (Laplacian)</option><option value="sharpen">Sharpen</option><option value="stem">Real stem kernel</option>
+        </select></label>
+      <label class="ctl" id="stem-row" hidden>Stem kernel <span class="mono" id="stem-idx">0</span><input type="range" id="stem-slider" min="0" max="31" value="0"></label>
+      <div class="kernel-edit" id="kernel-edit"></div>
+      <label class="ctl">Stride <div class="seg" id="stride"><button data-v="1" aria-pressed="true">1</button><button data-v="2" aria-pressed="false">2</button></div></label>
+      <label class="ctl">Padding <div class="seg" id="pad"><button data-v="1" aria-pressed="true">same</button><button data-v="0" aria-pressed="false">valid</button></div></label>
+      <label class="ctl">After the sum <div class="seg" id="act"><button data-v="none" aria-pressed="true">none</button><button data-v="relu" aria-pressed="false">ReLU</button><button data-v="silu" aria-pressed="false">SiLU</button></div></label>
+      <label class="ctl">Pooling instead <div class="seg" id="pool-method"><button data-v="none" aria-pressed="true">off</button><button data-v="max" aria-pressed="false">max 2×2</button><button data-v="avg" aria-pressed="false">avg 2×2</button></div></label>
+      <button class="chip" id="randomize">New input patch</button>
+    </div>
+    <div>
+      <div class="grids">
+        <div class="view-block"><div class="cap">Input patch · 8×8</div><div class="cells" id="in-grid"></div></div>
+        <div class="view-block"><div class="cap" id="out-cap">Output</div><div class="cells" id="out-grid"></div></div>
+      </div>
+      <div class="formula" id="formula">Hover an output cell.</div>
+      <div class="legend"><span><i style="background:var(--neg)"></i>negative</span><span><i style="background:#888"></i>zero</span><span><i style="background:var(--pos)"></i>positive</span></div>
+    </div>
+  </div>
+
+  <h2>Weights</h2>
+  <div class="panel">
+    <div class="bars" id="an-parambars"></div>
+    <p class="hint" id="an-unused" style="margin-top:8px"></p>
+    <h3>First-layer kernels, as learned</h3>
+    <p class="hint">Red is positive weight, blue negative. Click one to load it into the sandbox.</p>
+    <div class="kernels" id="an-kernels"></div>
+  </div>
+
+  <h2>Every layer</h2>
+  <div class="row"><label class="ctl">Stage <select id="an-group"><option value="">All</option></select></label><label class="ctl">Search <input id="an-search" type="search" placeholder="depthwise, se_, bn…"></label><span class="hint" id="an-count"></span></div>
+  <div class="panel table-wrap"><table><thead><tr><th>#</th><th>Layer</th><th>Type</th><th class="num">Kernel</th><th class="num">Stride</th><th class="num">In → out</th><th class="num">Params</th><th class="num">MACs</th><th class="num">Out MB</th></tr></thead><tbody id="an-rows"></tbody></table></div>
+</section>
+
+<!-- ============================ SIMULATE ============================ -->
+<section class="tab" id="tab-simulate" hidden>
+  <div class="row" style="margin-top:14px">
+    <label class="ctl">Model <select id="si-model"></select></label>
+    <label class="ctl">Image <select id="si-image"></select></label>
+    <label class="ctl">Preprocessing <select id="si-prep"></select></label>
+    <label class="ctl">Resolution <div class="seg" id="si-res"></div></label>
+  </div>
+  <div id="si-badges" style="margin-top:8px"></div>
+  <div class="panel">
+    <div class="views" id="si-views"></div>
+    <div class="legend"><span><i style="background:var(--gt)"></i>ground truth</span><span><i style="background:var(--pred)"></i>prediction</span><span><i style="background:#e8d44d"></i>overlap</span><span><i style="background:var(--hot)"></i>receptive field of hovered cell</span></div>
+    <div class="stats" id="si-stats" style="margin-top:10px"></div>
+  </div>
+  <h2>Stages</h2>
+  <p class="prose hint">Click a stage to see its 16 highest-variance channels on this image. Hover a channel map to draw the input patch one of its cells can see (its receptive field) on the input view above.</p>
+  <div class="chips" id="si-stages"></div>
+  <div class="panel" id="si-stage-panel"><p class="hint">Select a stage.</p></div>
+  <h2>Why it answered that way</h2>
+  <div class="panel grid2" id="si-saliency"></div>
+</section>
+
+<!-- ============================ COMPARE ============================ -->
+<section class="tab" id="tab-compare" hidden>
+  <div class="row" style="margin-top:14px">
+    <label class="ctl">Image <select id="cp-image"></select></label>
+    <label class="ctl">Resolution <div class="seg" id="cp-res"></div></label>
+    <label class="ctl">Stage <select id="cp-stage"></select></label>
+  </div>
+  <div class="grid2" id="cp-panels"></div>
+</section>
+
+<!-- ============================ COMPUTE ============================ -->
+<section class="tab" id="tab-compute" hidden>
+  <p class="prose" style="margin-top:14px">Parameters are fixed. Multiply-accumulates (MACs), activation bytes and input bytes scale with resolution and are computed exactly from the traced shapes; drag the slider. Latency is measured on the machine named below and only at the resolutions actually run.</p>
+  <div class="slider"><span class="hint">Resolution</span><input type="range" id="co-res" min="0" max="2" value="0" step="1"><span class="mono" id="co-res-label">256</span></div>
+  <div class="panel table-wrap"><table><thead><tr><th>Model</th><th class="num">Params</th><th class="num">Unused</th><th class="num">MACs</th><th class="num">Activations</th><th class="num">Largest tensor</th><th class="num">Input (uint8)</th><th class="num">Input (f32)</th><th class="num">Latency 256</th><th class="num">Latency 512</th></tr></thead><tbody id="co-rows"></tbody></table><p class="hint" id="co-machine"></p></div>
+  <h2>Where the cost sits</h2>
+  <div class="row"><label class="ctl">Model <select id="co-model"></select></label></div>
+  <div class="panel grid2"><div><h3>MACs by stage</h3><div class="bars" id="co-macs"></div></div><div><h3>Measured time by stage</h3><div class="bars" id="co-time"></div></div></div>
+  <div class="note prose">The decoder's share of MACs is the number to watch for the roadmap: it is trained from scratch on 810 images and it runs at the highest resolutions, so it is the natural first thing to shrink or freeze.</div>
+</section>
+
+<!-- ============================ GLOSSARY ============================ -->
+<section class="tab" id="tab-glossary" hidden>
+  <dl class="gloss" style="margin-top:14px">
+    <dt>Kernel / filter</dt><dd>A small grid of weights (3×3, 5×5, or 1×1 here) slid over the input. One kernel produces one output channel.</dd>
+    <dt>Channel</dt><dd>One layer of a feature map. The input mammogram has 1 (or 3 identical ones for Mammo-CLIP encoders); the bottleneck has hundreds.</dd>
+    <dt>Feature map</dt><dd>The tensor a stage outputs: channels × height × width. Early maps respond to edges; deep maps respond to tissue patterns.</dd>
+    <dt>Stride</dt><dd>How far the kernel steps between positions. Stride 2 halves the output size. EfficientNet encoders downsample with stride-2 convolutions, not pooling.</dd>
+    <dt>Depthwise / pointwise conv</dt><dd>Depthwise: one k×k kernel per channel, channels never mix. Pointwise: a 1×1 kernel that only mixes channels. Together they replace a full convolution at a fraction of the cost.</dd>
+    <dt>Squeeze-and-excite (SE) gate</dt><dd>Each block averages every channel to one number, passes it through two tiny layers and a sigmoid, and multiplies each channel by the result (0–1). The Simulate tab shows these gates per image: which channels the block turned up or down.</dd>
+    <dt>Skip connection</dt><dd>Concatenating an encoder map onto the decoder map of the same resolution, so fine detail bypasses the bottleneck.</dd>
+    <dt>Receptive field</dt><dd>The patch of input pixels that can influence one cell of a feature map. Grows with depth; at the bottleneck one cell sees most of the image. Computed analytically from kernel sizes and strides.</dd>
+    <dt>MACs</dt><dd>Multiply-accumulate operations for one forward pass; the standard hardware-independent cost. One MAC ≈ two FLOPs.</dd>
+    <dt>Activation bytes</dt><dd>Size of every intermediate tensor the forward pass produces (float32). An upper bound on activation memory; the largest single tensor is what usually limits batch size.</dd>
+    <dt>Latency</dt><dd>Median wall-clock time of one forward pass, measured here on a laptop CPU. It is a relative number for comparing models, not a deployment figure.</dd>
+    <dt>Unused parameters</dt><dd>Weights present in the checkpoint that the network never executes (EfficientNet's final 1×1 head, which a U-Net encoder does not need). They cost download size, not compute.</dd>
+    <dt>Grad-CAM</dt><dd>A saliency map: the gradient of a chosen scalar (here, the mean logit inside a region) with respect to a stage's channels, used to weight those channels. Bright areas are what pushed the answer up.</dd>
+    <dt>Logits, sigmoid, threshold</dt><dd>The head outputs raw scores. Sigmoid maps them to 0–1 probabilities. Pixels above 0.5 are the predicted mask that Dice is computed on.</dd>
+    <dt>Dice / IoU</dt><dd>Dice = 2·|pred ∩ truth| / (|pred| + |truth|). IoU = |pred ∩ truth| / |pred ∪ truth|. Both ignore the huge background, unlike pixel accuracy.</dd>
+    <dt>Native vs cross-applied</dt><dd>Native: the model is run on the preprocessing it was trained with. Cross-applied: on a different one, to test how brittle it is.</dd>
+    <dt>Decoder untrained</dt><dd>Only the encoder of that model has learned weights. Its predicted mask is noise and is shown only so the encoder's feature maps can be compared; do not read its Dice.</dd>
+  </dl>
+</section>
+
+<footer id="footer"></footer>
+</main>
+
+<script src="data/manifest.js"></script>
+<script>
+(function () {
+  'use strict';
+  var LAB = window.LAB;
+  var $ = function (id) { return document.getElementById(id); };
+  if (!LAB) { $('metaline').textContent = 'data/manifest.js did not load. Run: python -m src.lab.build --out docs/lab/data'; return; }
+  var fmt = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var fmtM = function (n) { return n >= 1e9 ? (n / 1e9).toFixed(2) + ' G' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1e3 ? (n / 1e3).toFixed(0) + ' k' : String(n); };
+  var fmtB = function (n) { return n >= 1e9 ? (n / 1e9).toFixed(2) + ' GB' : n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : (n / 1e3).toFixed(0) + ' kB'; };
+  var ms = function (s) { return s == null ? '–' : (s * 1000).toFixed(0) + ' ms'; };
+  var shp = function (s) { return s ? s.join('×') : '–'; };
+  var cssVar = function (n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+  var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  var DATA = 'data/';
+  var modelKeys = Object.keys(LAB.models), imageKeys = Object.keys(LAB.images);
+  var runs = LAB.runs;
+  var PREP_TITLES = { raw: 'raw', clahe_median: 'CLAHE + median', pca: 'PCA (90% var.)', breast_crop: 'breast crop' };
+  var pt = function (p) { return PREP_TITLES[p] || p; };
+
+  $('metaline').textContent = 'generated ' + LAB.meta.generated + ' · ' + LAB.meta.machine + ' · torch ' + LAB.meta.torch + ' · ' + runs.length + ' runs · ' + modelKeys.length + ' models · ' + imageKeys.length + ' images · all numbers illustrative';
+  $('footer').innerHTML = 'Data: TOMPEI-CMMD (' + LAB.meta.licenses['TOMPEI-CMMD'] + '). Mammo-CLIP encoders: ' + LAB.meta.licenses['Mammo-CLIP'] + '. Bundle built by <code>python -m src.lab.build</code>; spec in <code>docs/specs/architecture-lab.md</code>. Interaction design inspired by <a href="https://poloclub.github.io/cnn-explainer/">CNN Explainer</a>.';
+
+  /* ---------- images: cached async loader ---------- */
+  var imgCache = {};
+  function loadImg(path) {
+    if (imgCache[path]) return imgCache[path];
+    imgCache[path] = new Promise(function (res, rej) { var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error('missing ' + path)); }; im.src = DATA + path; });
+    return imgCache[path];
+  }
+  function heatColor(t) { // 0..1 -> [r,g,b]; magma-like
+    var stops = [[0, [10, 7, 30]], [0.3, [80, 18, 123]], [0.6, [182, 54, 121]], [0.85, [251, 140, 80]], [1, [252, 253, 191]]];
+    for (var i = 1; i < stops.length; i++) if (t <= stops[i][0]) { var a = stops[i - 1], b = stops[i], u = (t - a[0]) / (b[0] - a[0]); return [0, 1, 2].map(function (k) { return Math.round(a[1][k] + (b[1][k] - a[1][k]) * u); }); }
+    return stops[stops.length - 1][1];
+  }
+  function parseColor(c) { c = c.trim(); if (c[0] === '#') { var h = c.length === 4 ? c.slice(1).split('').map(function (x) { return x + x; }).join('') : c.slice(1); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; } var m = c.match(/\d+/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128]; }
+  function luma(rgb) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); }
+  function textOn(rgb) { return luma(rgb) > 0.18 ? '#111111' : '#ffffff'; }
+  var rgbStr = function (rgb) { return 'rgb(' + rgb.join(',') + ')'; };
+
+  // draw a grayscale image into a canvas, optionally with masks (gt, pred) and a heat map blended
+  function drawView(canvas, base, opts) {
+    opts = opts || {};
+    var W = base.naturalWidth, H = base.naturalHeight;
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(base, 0, 0);
+    var id = ctx.getImageData(0, 0, W, H), d = id.data;
+    var readMask = function (im) { var c = document.createElement('canvas'); c.width = W; c.height = H; var x = c.getContext('2d'); x.drawImage(im, 0, 0, W, H); return x.getImageData(0, 0, W, H).data; };
+    if (opts.heat) {
+      var hd = readMask(opts.heat);
+      for (var i = 0; i < d.length; i += 4) { var t = hd[i] / 255; if (t > 0.08) { var c = heatColor(t), a = Math.min(0.85, t); d[i] = d[i] * (1 - a) + c[0] * a; d[i + 1] = d[i + 1] * (1 - a) + c[1] * a; d[i + 2] = d[i + 2] * (1 - a) + c[2] * a; } }
+    }
+    if (opts.gt || opts.pred) {
+      var gd = opts.gt ? readMask(opts.gt) : null, pd = opts.pred ? readMask(opts.pred) : null;
+      var G = parseColor(cssVar('--gt')), P = parseColor(cssVar('--pred')), O = [232, 212, 77];
+      for (var j = 0; j < d.length; j += 4) {
+        var g = gd && gd[j] > 127, p = pd && pd[j] > 127;
+        if (!g && !p) continue;
+        var col = g && p ? O : g ? G : P, a2 = 0.55;
+        d[j] = d[j] * (1 - a2) + col[0] * a2; d[j + 1] = d[j + 1] * (1 - a2) + col[1] * a2; d[j + 2] = d[j + 2] * (1 - a2) + col[2] * a2;
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    if (opts.box) { var b = opts.box; ctx.strokeStyle = cssVar('--hot'); ctx.lineWidth = Math.max(2, W / 128); ctx.strokeRect(b[2], b[0], b[3] - b[2], b[1] - b[0]); }
+  }
+
+  /* ---------- tabs ---------- */
+  var tabs = ['anatomy', 'simulate', 'compare', 'compute', 'glossary'];
+  var tabInit = {};
+  function showTab(name) {
+    if (tabs.indexOf(name) < 0) name = 'anatomy';
+    tabs.forEach(function (t) { $('tab-' + t).hidden = t !== name; });
+    Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'), function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === name)); });
+    if (!tabInit[name]) { tabInit[name] = true; ({ anatomy: initAnatomy, simulate: initSimulate, compare: initCompare, compute: initCompute, glossary: function () {} })[name](); }
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'), function (b) { b.addEventListener('click', function () { location.hash = '#' + b.dataset.tab; showTab(b.dataset.tab); }); });
+  window.addEventListener('hashchange', function () { showTab(location.hash.slice(1)); });
+
+  function fillSelect(sel, keys, labelFn, keep) {
+    var prev = keep ? sel.value : null; sel.innerHTML = '';
+    keys.forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = labelFn ? labelFn(k) : k; sel.appendChild(o); });
+    if (prev && keys.indexOf(prev) >= 0) sel.value = prev;
+  }
+  function segButtons(box, values, labelFn, cb, current) {
+    box.innerHTML = '';
+    values.forEach(function (v) { var b = el('button', null, labelFn ? labelFn(v) : String(v)); b.dataset.v = v; b.setAttribute('aria-pressed', String(v == current)); b.addEventListener('click', function () { Array.prototype.forEach.call(box.children, function (o) { o.setAttribute('aria-pressed', 'false'); }); b.setAttribute('aria-pressed', 'true'); cb(v); }); box.appendChild(b); });
+  }
+  var modelTitle = function (k) { return LAB.models[k].title; };
+  var imageTitle = function (k) { var im = LAB.images[k]; return k + (im.group ? ' · ' + im.group : ''); };
+  var stageTitle = function (s) { return s.key + ' · ' + shp(s.shape) + (s.stride ? ' · stride ' + s.stride : ''); };
+
+  /* ====================================================================
+     ANATOMY
+     ==================================================================== */
+  var AN = { model: modelKeys[0] };
+  function initAnatomy() {
+    fillSelect($('an-model'), modelKeys, modelTitle);
+    $('an-model').addEventListener('change', function () { AN.model = this.value; renderAnatomy(); });
+    initSandbox();
+    renderAnatomy();
+  }
+  function convStats(layers) {
+    var convs = layers.filter(function (l) { return l.type.indexOf('Conv') === 0; });
+    var ks = {}; convs.forEach(function (c) { var k = c.kernel_size.join('×'); ks[k] = (ks[k] || 0) + 1; });
+    return { convs: convs.length, dw: convs.filter(function (c) { return c.depthwise; }).length, pw: convs.filter(function (c) { return c.pointwise; }).length, ks: ks,
+      strided: convs.filter(function (c) { return c.stride && c.stride[0] > 1; }), pools: layers.filter(function (l) { return l.type.indexOf('Pool') >= 0; }).length };
+  }
+  function renderAnatomy() {
+    var M = LAB.models[AN.model], L = M.layers, cs = convStats(L), T = M.totals;
+    var stats = [[fmt(T.params), 'parameters'], [cs.convs, 'conv layers'], [cs.dw + ' / ' + cs.pw, 'depthwise / 1×1'], [cs.pools, 'pooling layers'], [cs.strided.length, 'stride-2 convs'],
+      [Object.keys(cs.ks).map(function (k) { return k + ': ' + cs.ks[k]; }).join(' · '), 'kernel sizes', 'small'], [M.encoder, 'encoder', 'small'], [M.weights === 'checkpoint' ? 'trained (team)' : M.weights, 'weights', 'small']];
+    $('an-stats').innerHTML = stats.map(function (s) { return '<div class="stat"><div class="v ' + (s[2] || '') + '">' + s[0] + '</div><div class="k">' + s[1] + '</div></div>'; }).join('');
+    renderMap(M);
+    var rf = M.receptive_field, deep = rf['enc' + (M.stages.filter(function (s) { return s.kind === 'encoder'; }).length)];
+    var res = M.stages[0].shape[1];
+    $('an-rfnote').innerHTML = '<strong>Receptive field.</strong> At the bottleneck one cell can see a ' + Math.round(deep.size) + '×' + Math.round(deep.size) + ' pixel patch of the ' + res + '×' + res + ' input, stepping ' + deep.jump + ' pixels per cell. The original mammogram is 2294×1914, so at ' + res + ' input that patch covers about ' + Math.round(deep.size * 2294 / res) + ' original pixels, roughly ' + (deep.size * 2294 / res * 0.085 / 10).toFixed(1) + ' cm of tissue. A small mass survives only through the stride-2 and stride-4 skip connections.';
+    // weights
+    var groups = T.by_group, enc = 0, dec = 0, head = 0;
+    Object.keys(groups).forEach(function (g) { var p = groups[g].params; if (g.indexOf('encoder') === 0) enc += p; else if (g.indexOf('decoder') === 0) dec += p; else head += p; });
+    var parts = [['encoder', enc, ''], ['decoder', dec, 'dec'], ['head', head, '']];
+    $('an-parambars').innerHTML = parts.map(function (p) { return '<div class="bar-row"><span>' + p[0] + '</span><div class="bar-track"><div class="bar-fill ' + p[2] + '" style="width:' + (100 * p[1] / T.params_traced) + '%"></div></div><span class="mono">' + fmt(p[1]) + '</span></div>'; }).join('');
+    $('an-unused').textContent = T.params_unused > 0 ? fmt(T.params_unused) + ' further parameters are in the checkpoint but never executed (the encoder\'s classification head). ' + (M.decoder_trained ? '' : 'The decoder here is untrained (random).') : '';
+    renderKernels(M);
+    // layer table
+    var gf = $('an-group'); gf.innerHTML = '<option value="">All</option>';
+    var seen = []; L.forEach(function (l) { if (seen.indexOf(l.group) < 0) seen.push(l.group); });
+    seen.forEach(function (g) { var o = document.createElement('option'); o.value = g; o.textContent = g; gf.appendChild(o); });
+    gf.onchange = renderLayerTable; $('an-search').oninput = renderLayerTable;
+    renderLayerTable();
+    if (!tabInit.sandboxStem) { tabInit.sandboxStem = true; }
+    stemK = M.stem_kernels.kernels; if ($('preset').value === 'stem') loadStem(Math.min(+$('stem-slider').value, stemK.length - 1));
+  }
+  function renderLayerTable() {
+    var M = LAB.models[AN.model], g = $('an-group').value, q = $('an-search').value.toLowerCase();
+    var rows = M.layers.filter(function (l) { return (!g || l.group === g) && (!q || (l.name + ' ' + l.type + (l.depthwise ? ' depthwise' : '') + (l.pointwise ? ' pointwise 1x1' : '')).toLowerCase().indexOf(q) >= 0); });
+    $('an-rows').innerHTML = rows.map(function (l) {
+      var type = l.type + (l.depthwise ? ' (depthwise)' : l.pointwise ? ' (1×1)' : '');
+      return '<tr><td class="mono">' + l.order + '</td><td class="mono">' + l.name + '</td><td>' + type + '</td><td class="num">' + (l.kernel_size ? l.kernel_size.join('×') : '') + '</td><td class="num">' + (l.stride ? l.stride[0] : '') + '</td><td class="num">' + shp(l.in_shape && l.in_shape.slice(1)) + ' → ' + shp(l.out_shape && l.out_shape.slice(1)) + '</td><td class="num">' + fmt(l.params) + '</td><td class="num">' + fmtM(l.macs) + '</td><td class="num">' + (l.out_bytes / 1e6).toFixed(2) + '</td></tr>';
+    }).join('');
+    $('an-count').textContent = rows.length + ' of ' + M.layers.length + ' modules';
+  }
+  function renderMap(M) {
+    var svg = $('an-map'); svg.innerHTML = '';
+    var NS = 'http://www.w3.org/2000/svg';
+    var mk = function (tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; };
+    var defs = mk('defs', {}); var marker = mk('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, defs);
+    mk('path', { d: 'M0,0 L10,5 L0,10 z', fill: cssVar('--muted') }, marker);
+    var encS = M.stages.filter(function (s) { return s.kind === 'input' || s.kind === 'encoder'; }), decS = M.stages.filter(function (s) { return s.kind === 'decoder'; }), headS = M.stages[M.stages.length - 1];
+    var leftX = 70, rightX = 910, topY = 40, stepY = 58;
+    var boxH = function (hw) { return 14 + Math.log2(hw) * 2.2; }, boxW = function (c) { return 54 + Math.log2(c + 1) * 10; };
+    var nodes = [], byId = {};
+    encS.forEach(function (s, i) { var w = boxW(s.shape[0]), h = boxH(s.shape[1]), x = leftX + i * 28, y = topY + i * stepY; nodes.push({ id: s.key, kind: s.kind, x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2, label: shp(s.shape), sub: i === 0 ? 'input image' : 'stride ' + s.stride, groups: i === 0 ? null : (M.encoder_groups[s.key] || []) }); });
+    decS.forEach(function (s, j) { var row = encS.length - 2 - j, w = boxW(s.shape[0]), h = boxH(s.shape[1]), x = rightX - w - row * 28, y = topY + row * stepY; nodes.push({ id: s.key, kind: 'decoder', x: x, y: y, w: w, h: h, cx: x + w / 2, cy: y + h / 2, label: shp(s.shape), sub: 'decoder block ' + j, groups: ['decoder.blocks.' + j], skip: s.skip_shape }); });
+    var hw = boxW(1), hh = boxH(headS.shape[1]); nodes.push({ id: 'head', kind: 'head', x: rightX - hw + 40, y: topY - 10, w: hw, h: hh, cx: rightX + 40 - hw / 2, cy: topY - 10 + hh / 2, label: shp(headS.shape), sub: 'logits → sigmoid', groups: ['segmentation_head'] });
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    var edges = [];
+    for (var i = 0; i < encS.length - 1; i++) edges.push([encS[i].key, encS[i + 1].key, false]);
+    edges.push([encS[encS.length - 1].key, decS[0].key, false]);
+    for (var j = 0; j < decS.length - 1; j++) edges.push([decS[j].key, decS[j + 1].key, false]);
+    edges.push([decS[decS.length - 1].key, 'head', false]);
+    decS.forEach(function (s) { if (!s.skip_shape) return; var li = encS.filter(function (e, i) { return i > 0 && e.shape[1] === s.shape[1]; })[0]; if (li) edges.push([li.key, s.key, true]); });
+    edges.forEach(function (e) {
+      var a = byId[e[0]], b = byId[e[1]], d;
+      if (e[2]) d = 'M' + (a.x + a.w) + ',' + a.cy + ' L' + b.x + ',' + b.cy;
+      else if (a.kind !== 'decoder' && b.kind !== 'decoder' && b.kind !== 'head') d = 'M' + a.cx + ',' + (a.y + a.h) + ' L' + b.cx + ',' + b.y;
+      else if (a.kind !== 'decoder' && b.kind === 'decoder') d = 'M' + (a.x + a.w) + ',' + a.cy + ' C' + (a.x + a.w + 120) + ',' + a.cy + ' ' + (b.x - 120) + ',' + b.cy + ' ' + b.x + ',' + b.cy;
+      else d = 'M' + a.cx + ',' + a.y + ' L' + b.cx + ',' + (b.y + b.h);
+      mk('path', { d: d, 'class': 'edge' + (e[2] ? ' skip' : '') });
+    });
+    mk('text', { x: leftX, y: 22, 'class': 'map-label' }).textContent = 'ENCODER (' + M.encoder + ') — resolution halves, channels grow';
+    mk('text', { x: rightX - 330, y: 22, 'class': 'map-label' }).textContent = 'DECODER — resolution doubles, skips concatenated';
+    nodes.forEach(function (n) {
+      var g = mk('g', { 'class': 'node', tabindex: '0', role: 'button', 'aria-label': n.sub + ' ' + n.label });
+      mk('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 3 }, g);
+      mk('text', { x: n.x + 6, y: n.y + 12 }, g).textContent = n.label;
+      mk('text', { x: n.x + 6, y: n.y + n.h - 4, 'class': 'dim' }, g).textContent = n.sub;
+      var show = function () { Array.prototype.forEach.call(svg.querySelectorAll('.node'), function (x) { x.classList.remove('active'); }); g.classList.add('active'); mapDetail(M, n); };
+      g.addEventListener('click', show); g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); show(); } });
+    });
+    var bn = svg.querySelectorAll('.node')[encS.length - 1]; if (bn) bn.dispatchEvent(new Event('click'));
+  }
+  function mapDetail(M, n) {
+    var d = $('an-detail');
+    if (!n.groups) { d.innerHTML = '<h3>Input image</h3><p class="prose">' + n.label + ' (channels × H × W). ' + (M.in_channels === 3 ? 'Three identical copies of the grayscale image, normalised with Mammo-CLIP\'s constants.' : 'One channel, scaled by its maximum.') + ' The original mammogram is 2294×1914.</p>'; return; }
+    var rows = M.layers.filter(function (l) { return n.groups.indexOf(l.group) >= 0; });
+    var params = rows.reduce(function (a, l) { return a + l.params; }, 0), macs = rows.reduce(function (a, l) { return a + l.macs; }, 0);
+    var rf = M.receptive_field[n.id];
+    var intro = n.kind === 'decoder' ? '<p class="prose">Upsample ×2 (nearest neighbour, no weights), ' + (n.skip ? 'concatenate the encoder map <code>' + shp(n.skip) + '</code>, ' : 'no skip here, ') + 'then two 3×3 conv + BatchNorm + ReLU.</p>' : n.kind === 'head' ? '<p class="prose">One 3×3 convolution to a single channel of logits; sigmoid and a 0.5 threshold give the mask.</p>' : '<p class="prose">' + n.groups.length + ' module group' + (n.groups.length > 1 ? 's' : '') + ' produce this map' + (rf ? '; each cell sees a ' + Math.round(rf.size) + '-pixel patch of the input' : '') + '.</p>';
+    d.innerHTML = '<h3>' + n.sub + ' · ' + n.label + ' · ' + fmt(params) + ' params · ' + fmtM(macs) + ' MACs</h3>' + intro + '<div class="table-wrap"><table><thead><tr><th>Layer</th><th>Type</th><th class="num">Kernel</th><th class="num">Stride</th><th class="num">In → out</th><th class="num">Params</th><th class="num">MACs</th></tr></thead><tbody>' +
+      rows.map(function (l) { return '<tr><td class="mono">' + l.name + '</td><td>' + l.type + (l.depthwise ? ' (depthwise)' : l.pointwise ? ' (1×1)' : '') + '</td><td class="num">' + (l.kernel_size ? l.kernel_size.join('×') : '') + '</td><td class="num">' + (l.stride ? l.stride[0] : '') + '</td><td class="num">' + shp(l.in_shape && l.in_shape.slice(1)) + ' → ' + shp(l.out_shape && l.out_shape.slice(1)) + '</td><td class="num">' + fmt(l.params) + '</td><td class="num">' + fmtM(l.macs) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function renderKernels(M) {
+    var gal = $('an-kernels'); gal.innerHTML = '';
+    var ks = M.stem_kernels.kernels;
+    var maxAbs = Math.max.apply(null, ks.map(function (k) { return Math.max.apply(null, k[0].map(function (r) { return Math.max.apply(null, r.map(Math.abs)); })); }));
+    ks.forEach(function (k, i) {
+      var wrap = el('div', 'kern'); wrap.tabIndex = 0; wrap.setAttribute('role', 'button');
+      var cv = document.createElement('canvas'); var n = k[0].length; cv.width = n; cv.height = n; var ctx = cv.getContext('2d');
+      for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) { ctx.fillStyle = rgbStr(diverge(k[0][y][x], maxAbs)); ctx.fillRect(x, y, 1, 1); }
+      wrap.appendChild(cv); wrap.appendChild(el('span', null, '#' + i));
+      var pick = function () { $('preset').value = 'stem'; $('stem-row').hidden = false; $('stem-slider').max = ks.length - 1; $('stem-slider').value = i; loadStem(i); $('kernel-edit').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+      wrap.addEventListener('click', pick); wrap.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } });
+      gal.appendChild(wrap);
+    });
+    $('stem-slider').max = ks.length - 1;
+  }
+
+  /* ---------- convolution sandbox ---------- */
+  var N = 8, K = 3, input = [], kernel = [[0, -1, 0], [-1, 4, -1], [0, -1, 0]], stride = 1, pad = 1, act = 'none', poolMethod = 'none', stemK = LAB.models[modelKeys[0]].stem_kernels.kernels;
+  var presets = { identity: [[0, 0, 0], [0, 1, 0], [0, 0, 0]], box: [[1 / 9, 1 / 9, 1 / 9], [1 / 9, 1 / 9, 1 / 9], [1 / 9, 1 / 9, 1 / 9]], sobelx: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], lap: [[0, -1, 0], [-1, 4, -1], [0, -1, 0]], sharpen: [[0, -1, 0], [-1, 5, -1], [0, -1, 0]] };
+  var seed = 7; function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  function makeInput() { var cx = 2 + rnd() * 4, cy = 2 + rnd() * 4, r = 1.3 + rnd() * 1.2; input = []; for (var y = 0; y < N; y++) { var row = []; for (var x = 0; x < N; x++) { var d = Math.hypot(x - cx, y - cy); row.push(Math.round(Math.min(255, 40 + 60 * rnd() + (d < r ? 150 : d < r + 1 ? 80 : 0)))); } input.push(row); } }
+  function gray(v) { var g = Math.round(Math.max(0, Math.min(255, v))); return [g, g, g]; }
+  function diverge(v, scale) { var t = Math.max(-1, Math.min(1, v / scale)), a = Math.abs(t); var col = parseColor(cssVar(t < 0 ? '--neg' : '--pos')); return col.map(function (c) { return Math.round(128 * (1 - a) + c * a); }); }
+  function applyAct(v) { if (act === 'relu') return Math.max(0, v); if (act === 'silu') return v / (1 + Math.exp(-v)); return v; }
+  function convolve(s, p) { var size = Math.floor((N + 2 * p - K) / s) + 1, res = []; for (var oy = 0; oy < size; oy++) { var row = []; for (var ox = 0; ox < size; ox++) { var sum = 0; for (var ky = 0; ky < K; ky++) for (var kx = 0; kx < K; kx++) { var iy = oy * s + ky - p, ix = ox * s + kx - p; sum += ((iy < 0 || ix < 0 || iy >= N || ix >= N) ? 0 : input[iy][ix]) * kernel[ky][kx]; } row.push(sum); } res.push(row); } return res; }
+  function pool() { var res = []; for (var oy = 0; oy < N / 2; oy++) { var row = []; for (var ox = 0; ox < N / 2; ox++) { var v = [input[2 * oy][2 * ox], input[2 * oy][2 * ox + 1], input[2 * oy + 1][2 * ox], input[2 * oy + 1][2 * ox + 1]]; row.push(poolMethod === 'max' ? Math.max.apply(null, v) : (v[0] + v[1] + v[2] + v[3]) / 4); } res.push(row); } return res; }
+  function renderGrid(container, m, colorFn) { container.style.gridTemplateColumns = 'repeat(' + m[0].length + ', auto)'; container.innerHTML = ''; m.forEach(function (row, y) { row.forEach(function (v, x) { var c = el('div', 'cell'); var bg = colorFn(v); c.style.background = rgbStr(bg); c.style.color = textOn(bg); c.textContent = Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10; c.dataset.x = x; c.dataset.y = y; container.appendChild(c); }); }); }
+  function renderConv() {
+    var inG = $('in-grid'), outG = $('out-grid'); renderGrid(inG, input, gray);
+    var res, cap;
+    if (poolMethod !== 'none') { res = pool(); renderGrid(outG, res, gray); cap = 'Output · ' + res.length + '×' + res.length + ' (' + poolMethod + ' pool 2×2, no weights)'; }
+    else { res = convolve(stride, pad); var maxAbs = Math.max(1, Math.max.apply(null, res.map(function (r) { return Math.max.apply(null, r.map(Math.abs)); }))); renderGrid(outG, res.map(function (r) { return r.map(applyAct); }), function (v) { return diverge(v, maxAbs); }); cap = 'Output · ' + res.length + '×' + res.length + ' (stride ' + stride + ', pad ' + pad + (act !== 'none' ? ', ' + act.toUpperCase() : '') + ')'; }
+    $('out-cap').textContent = cap;
+    Array.prototype.forEach.call(outG.children, function (c) { c.addEventListener('mouseenter', function () { showWindow(+c.dataset.x, +c.dataset.y, res); }); });
+    outG.onmouseleave = clearWin;
+  }
+  function clearWin() { Array.prototype.forEach.call($('in-grid').children, function (c) { c.classList.remove('win'); }); Array.prototype.forEach.call($('out-grid').children, function (c) { c.classList.remove('src'); }); }
+  function showWindow(ox, oy, res) {
+    clearWin(); var inG = $('in-grid'); $('out-grid').children[oy * res.length + ox].classList.add('src');
+    if (poolMethod !== 'none') { var vals = []; for (var dy = 0; dy < 2; dy++) for (var dx = 0; dx < 2; dx++) { var y = oy * 2 + dy, x = ox * 2 + dx; inG.children[y * N + x].classList.add('win'); vals.push(input[y][x]); } $('formula').innerHTML = (poolMethod === 'max' ? 'max' : 'mean') + '(' + vals.join(', ') + ') = <b>' + Math.round(res[oy][ox] * 100) / 100 + '</b>'; return; }
+    var parts = [];
+    for (var ky = 0; ky < K; ky++) for (var kx = 0; kx < K; kx++) { var iy = oy * stride + ky - pad, ix = ox * stride + kx - pad, inside = !(iy < 0 || ix < 0 || iy >= N || ix >= N), px = inside ? input[iy][ix] : 0; if (inside) inG.children[iy * N + ix].classList.add('win'); var w = kernel[ky][kx]; if (w !== 0) parts.push(px + '×' + Math.round(w * 100) / 100); }
+    var raw = res[oy][ox], after = applyAct(raw);
+    $('formula').innerHTML = 'output[' + oy + ',' + ox + '] = ' + (parts.length ? parts.join(' + ') : '0') + ' = <b>' + Math.round(raw * 100) / 100 + '</b>' + (act !== 'none' ? '  →  ' + act.toUpperCase() + ' → <b>' + Math.round(after * 100) / 100 + '</b>' : '') + '\n(' + K * K + ' multiply-adds per output pixel; the same ' + K * K + ' weights at every position)';
+  }
+  function renderKernelEditor() { var ke = $('kernel-edit'); ke.innerHTML = ''; for (var y = 0; y < K; y++) for (var x = 0; x < K; x++) { var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'k' + y + x; inp.value = Math.round(kernel[y][x] * 1000) / 1000; inp.setAttribute('aria-label', 'kernel weight ' + y + ',' + x); (function (yy, xx, node) { node.addEventListener('change', function () { var v = parseFloat(node.value); if (!isNaN(v)) { kernel[yy][xx] = v; renderConv(); } }); })(y, x, inp); ke.appendChild(inp); } }
+  function setKernel(k) { kernel = k.map(function (r) { return r.slice(); }); renderKernelEditor(); renderConv(); }
+  function loadStem(i) { var k = stemK[i][0]; if (k.length !== 3) { k = k.slice(0, 3).map(function (r) { return r.slice(0, 3); }); } setKernel(k); $('stem-idx').textContent = i; Array.prototype.forEach.call($('an-kernels').children, function (c, j) { c.classList.toggle('active', j === i); }); }
+  function initSandbox() {
+    $('preset').addEventListener('change', function (e) { var v = e.target.value; $('stem-row').hidden = v !== 'stem'; if (v === 'stem') loadStem(+$('stem-slider').value); else setKernel(presets[v]); });
+    $('stem-slider').addEventListener('input', function (e) { loadStem(+e.target.value); });
+    var seg = function (id, cb) { var box = $(id); Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) { b.addEventListener('click', function () { Array.prototype.forEach.call(box.querySelectorAll('button'), function (o) { o.setAttribute('aria-pressed', 'false'); }); b.setAttribute('aria-pressed', 'true'); cb(b.dataset.v); }); }); };
+    seg('stride', function (v) { stride = +v; renderConv(); }); seg('pad', function (v) { pad = +v; renderConv(); }); seg('act', function (v) { act = v; renderConv(); }); seg('pool-method', function (v) { poolMethod = v; renderConv(); });
+    $('randomize').addEventListener('click', function () { makeInput(); renderConv(); });
+    makeInput(); renderKernelEditor(); renderConv();
+  }
+
+  /* ====================================================================
+     SIMULATE
+     ==================================================================== */
+  var SI = { model: null, image: null, prep: null, res: null, stage: 'enc1' };
+  function runsFor(f) { return runs.filter(function (r) { for (var k in f) if (f[k] != null && String(r[k]) !== String(f[k])) return false; return true; }); }
+  function uniq(arr) { var out = []; arr.forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); }); return out; }
+  function initSimulate() {
+    var modelsWithRuns = modelKeys.filter(function (m) { return runsFor({ model: m }).length; });
+    fillSelect($('si-model'), modelsWithRuns, modelTitle); SI.model = modelsWithRuns[0];
+    $('si-model').addEventListener('change', function () { SI.model = this.value; refreshSimulateOptions(); renderSimulate(); });
+    $('si-image').addEventListener('change', function () { SI.image = this.value; refreshSimulateOptions(); renderSimulate(); });
+    $('si-prep').addEventListener('change', function () { SI.prep = this.value; refreshSimulateOptions(); renderSimulate(); });
+    refreshSimulateOptions(); renderSimulate();
+  }
+  function refreshSimulateOptions() {
+    var imgs = uniq(runsFor({ model: SI.model }).map(function (r) { return r.image; }));
+    fillSelect($('si-image'), imgs, imageTitle, true); if (imgs.indexOf(SI.image) < 0) SI.image = imgs[0]; $('si-image').value = SI.image;
+    var preps = uniq(runsFor({ model: SI.model, image: SI.image }).map(function (r) { return r.preprocessing; }));
+    var M = LAB.models[SI.model];
+    fillSelect($('si-prep'), preps, function (p) { return pt(p) + (p === M.native_preprocessing ? ' (native)' : ''); }, true); if (preps.indexOf(SI.prep) < 0) SI.prep = preps.indexOf(M.native_preprocessing) >= 0 ? M.native_preprocessing : preps[0]; $('si-prep').value = SI.prep;
+    var ress = uniq(runsFor({ model: SI.model, image: SI.image, preprocessing: SI.prep }).map(function (r) { return r.resolution; }));
+    if (ress.indexOf(SI.res) < 0) SI.res = ress[0];
+    segButtons($('si-res'), ress, null, function (v) { SI.res = +v; renderSimulate(); }, SI.res);
+  }
+  function currentRun() { return runsFor({ model: SI.model, image: SI.image, preprocessing: SI.prep, resolution: SI.res })[0]; }
+  function renderSimulate() {
+    var r = currentRun(); if (!r) return;
+    var M = LAB.models[r.model], IM = LAB.images[r.image];
+    var badges = [];
+    if (!r.decoder_trained) badges.push('<span class="badge">decoder untrained — mask is noise</span>');
+    badges.push(r.native ? '<span class="badge ok">native preprocessing</span>' : '<span class="badge">cross-applied: trained on ' + pt(M.native_preprocessing) + '</span>');
+    if (IM.group) badges.push('<span class="badge ok">sample group: ' + IM.group + '</span>');
+    $('si-badges').innerHTML = badges.join(' ');
+    var views = $('si-views'); views.innerHTML = '';
+    var mkView = function (cap, id) { var b = el('div', 'view-block'); var c = document.createElement('canvas'); c.className = 'view'; c.id = id; b.appendChild(c); b.appendChild(el('div', 'cap', cap)); views.appendChild(b); return c; };
+    var cIn = mkView('input · ' + pt(r.preprocessing) + ' · ' + r.resolution + '²', 'si-c-in'), cProb = mkView('sigmoid(logits)', 'si-c-prob'), cOv = mkView('prediction vs ground truth', 'si-c-ov');
+    var thumbP = IM.thumbs[r.preprocessing], gtP = IM.gt[r.preprocessing];
+    Promise.all([loadImg(thumbP), loadImg(gtP), loadImg(r.files.prob), loadImg(r.files.pred)]).then(function (im) {
+      SI.base = im[0]; SI.gtImg = im[1]; drawView(cIn, im[0], { gt: im[1] }); drawView(cProb, im[2]); drawView(cOv, im[0], { gt: im[1], pred: im[3] });
+    }).catch(function (e) { views.appendChild(el('p', 'hint', e.message)); });
+    var base = IM.baseline, baseKey = { unet_b0_raw: 'raw', unet_b0_clahe: 'clahe' }[r.model];
+    var stats = [[r.dice.toFixed(3), 'Dice' + (r.decoder_trained ? '' : ' (untrained decoder)')], [r.iou.toFixed(3), 'IoU'], [fmt(r.gt_area_px) + ' / ' + fmt(r.pred_area_px), 'mass px: truth / predicted', 'small'], [r.prob_max.toFixed(2), 'max probability'],
+      [r.missed ? 'missed' : (r.gt_area_px ? 'found' : 'no mass'), 'outcome']];
+    if (base && baseKey && r.native && r.resolution === M.stages[0].shape[1]) stats.push([base[baseKey].toFixed(3), 'Dice in the Colab run (same model, image)', 'small']);
+    if (IM.meta && IM.meta[r.preprocessing] && IM.meta[r.preprocessing].pixels_kept_fraction) stats.push([(100 * IM.meta[r.preprocessing].pixels_kept_fraction).toFixed(0) + '%', 'pixels kept by crop']);
+    $('si-stats').innerHTML = stats.map(function (s) { return '<div class="stat"><div class="v ' + (s[2] || '') + '">' + s[0] + '</div><div class="k">' + s[1] + '</div></div>'; }).join('');
+    // stages
+    var chips = $('si-stages'); chips.innerHTML = '';
+    r.stages.forEach(function (s) { var b = el('button', 'chip ' + (s.kind === 'decoder' ? 'dec' : 'enc'), s.key + ' ' + shp(s.shape)); b.setAttribute('aria-pressed', String(s.key === SI.stage)); b.addEventListener('click', function () { SI.stage = s.key; Array.prototype.forEach.call(chips.children, function (o) { o.setAttribute('aria-pressed', 'false'); }); b.setAttribute('aria-pressed', 'true'); renderStage(r, s); }); chips.appendChild(b); });
+    var cur = r.stages.filter(function (s) { return s.key === SI.stage; })[0] || r.stages[1]; SI.stage = cur.key;
+    Array.prototype.forEach.call(chips.children, function (o) { o.setAttribute('aria-pressed', String(o.textContent.indexOf(cur.key + ' ') === 0)); });
+    renderStage(r, cur);
+    renderSaliency(r);
+  }
+  function renderStage(r, s) {
+    var M = LAB.models[r.model], panel = $('si-stage-panel'); panel.innerHTML = '';
+    var rf = M.receptive_field[s.key];
+    var head = el('h3', null, s.key + ' · ' + shp(s.shape) + (s.stride ? ' · stride ' + s.stride : '') + (rf ? ' · receptive field ' + Math.round(rf.size) + ' px' : ''));
+    panel.appendChild(head);
+    var expl = s.kind === 'input' ? 'The network\'s input. ' : s.kind === 'encoder' ? 'Encoder map at stride ' + s.stride + ': each cell summarises a ' + (rf ? Math.round(rf.size) : '?') + '-pixel patch. ' : s.kind === 'decoder' ? 'Decoder map: upsampled and merged with the skip connection' + (s.skip_shape ? ' ' + shp(s.skip_shape) : '') + '. ' : '';
+    panel.appendChild(el('p', 'hint', expl + 'Showing the ' + s.channels.length + ' of ' + s.channels_total + ' channels with the highest variance on this image, each scaled to its own range (bright = strong response). Hover a map to see which input patch one of its cells can see.'));
+    var tiles = el('div', 'tiles'); panel.appendChild(tiles);
+    loadImg(s.sprite).then(function (sprite) {
+      s.channels.forEach(function (ch, n) {
+        var t = el('div', 'tile'); var cv = document.createElement('canvas'); cv.width = s.tile; cv.height = s.tile;
+        var row = Math.floor(n / s.cols), col = n % s.cols;
+        cv.getContext('2d').drawImage(sprite, col * s.tile, row * s.tile, s.tile, s.tile, 0, 0, s.tile, s.tile);
+        t.appendChild(cv); t.appendChild(el('span', null, 'ch ' + ch.channel + ' · σ ' + ch.std.toFixed(2) + ' · ' + Math.round(ch.sparsity * 100) + '% zero'));
+        cv.addEventListener('mousemove', function (ev) {
+          if (!rf || !SI.base) return;
+          var rect = cv.getBoundingClientRect(); var fx = (ev.clientX - rect.left) / rect.width, fy = (ev.clientY - rect.top) / rect.height;
+          var mh = s.map_shape[0], mw = s.map_shape[1], crow = Math.floor(fy * mh), ccol = Math.floor(fx * mw);
+          var cy = rf.start + crow * rf.jump, cx = rf.start + ccol * rf.jump, half = rf.size / 2, scale = SI.base.naturalWidth / r.resolution;
+          var box = [Math.max(0, (cy - half) * scale), Math.min(SI.base.naturalHeight, (cy + half) * scale), Math.max(0, (cx - half) * scale), Math.min(SI.base.naturalWidth, (cx + half) * scale)];
+          drawView($('si-c-in'), SI.base, { gt: SI.gtImg, box: box });
+        });
+        cv.addEventListener('mouseleave', function () { if (SI.base) drawView($('si-c-in'), SI.base, { gt: SI.gtImg }); });
+        tiles.appendChild(t);
+      });
+    }).catch(function (e) { panel.appendChild(el('p', 'hint', e.message)); });
+    // SE gates for this stage's blocks
+    var groups = s.kind === 'encoder' ? (M.encoder_groups[s.key] || []) : [];
+    var gates = r.se.filter(function (g) { return groups.indexOf(g.block) >= 0; });
+    if (gates.length) {
+      panel.appendChild(el('h3', null, 'Squeeze-and-excite gates in this stage'));
+      panel.appendChild(el('p', 'hint', 'Per block: how many channels, the mean gate (1 = pass through, 0 = silence), and the channels this image turned up most.'));
+      var tw = el('div', 'table-wrap'); var tb = '<table><thead><tr><th>Block</th><th class="num">Channels</th><th class="num">Mean gate</th><th class="num">Min</th><th class="num">Max</th><th>Most open channels</th></tr></thead><tbody>' + gates.map(function (g) { return '<tr><td class="mono">' + g.block + '</td><td class="num">' + g.channels + '</td><td class="num">' + g.mean.toFixed(2) + '</td><td class="num">' + g.min.toFixed(2) + '</td><td class="num">' + g.max.toFixed(2) + '</td><td class="mono">' + g.top_channels.map(function (c, i) { return c + ' (' + g.top_values[i] + ')'; }).join(', ') + '</td></tr>'; }).join('') + '</tbody></table>';
+      tw.innerHTML = tb; panel.appendChild(tw);
+    }
+  }
+  function renderSaliency(r) {
+    var box = $('si-saliency'); box.innerHTML = '';
+    var IM = LAB.images[r.image];
+    var items = [['gt_encoder', 'What pushed the mass region up, seen at the bottleneck'], ['gt_dec2', 'Same target, seen at the stride-4 decoder block'], ['pred_encoder', 'What the model was looking at instead (its own predicted region)']];
+    var any = false;
+    items.forEach(function (it) {
+      if (!r.saliency[it[0]]) return; any = true;
+      var b = el('div', 'view-block'); var c = document.createElement('canvas'); c.className = 'view'; b.appendChild(c); b.appendChild(el('div', 'cap', it[1])); box.appendChild(b);
+      Promise.all([loadImg(IM.thumbs[r.preprocessing]), loadImg(r.saliency[it[0]]), loadImg(IM.gt[r.preprocessing])]).then(function (im) { drawView(c, im[0], { heat: im[1], gt: im[2] }); });
+    });
+    if (!any) box.appendChild(el('p', 'hint', 'No saliency for this run (no mass and no prediction).'));
+    else box.appendChild(el('p', 'prose hint', 'Grad-CAM: bright regions raised the mean logit inside the target region. Green outline: ground truth. When the model missed the mass, the third map shows the region it preferred.'));
+  }
+
+  /* ====================================================================
+     COMPARE
+     ==================================================================== */
+  var CP = { image: null, res: null, stage: 'enc3', left: {}, right: {} };
+  function initCompare() {
+    var imgs = uniq(runs.map(function (r) { return r.image; })); fillSelect($('cp-image'), imgs, imageTitle); CP.image = imgs[0];
+    var ress = uniq(runs.map(function (r) { return r.resolution; })); CP.res = ress[0]; segButtons($('cp-res'), ress, null, function (v) { CP.res = +v; renderCompare(); }, CP.res);
+    var stages = uniq(runs[0].stages.map(function (s) { return s.key; })); fillSelect($('cp-stage'), stages); $('cp-stage').value = CP.stage;
+    $('cp-image').addEventListener('change', function () { CP.image = this.value; renderCompare(); }); $('cp-stage').addEventListener('change', function () { CP.stage = this.value; renderCompare(); });
+    var modelsWithRuns = modelKeys.filter(function (m) { return runsFor({ model: m }).length; });
+    CP.left = { model: modelsWithRuns[0] }; CP.right = { model: modelsWithRuns[1] || modelsWithRuns[0] };
+    renderCompare();
+  }
+  function renderCompare() {
+    var host = $('cp-panels'); host.innerHTML = '';
+    [CP.left, CP.right].forEach(function (side, idx) {
+      var p = el('div', 'panel'); host.appendChild(p);
+      var row = el('div', 'row'); p.appendChild(row);
+      var ms = el('select'); var modelsWithRuns = modelKeys.filter(function (m) { return runsFor({ model: m, image: CP.image }).length; }); fillSelect(ms, modelsWithRuns, modelTitle); if (modelsWithRuns.indexOf(side.model) < 0) side.model = modelsWithRuns[0]; ms.value = side.model;
+      var preps = uniq(runsFor({ model: side.model, image: CP.image, resolution: CP.res }).map(function (r) { return r.preprocessing; })); if (preps.indexOf(side.prep) < 0) side.prep = preps[0];
+      var ps = el('select'); fillSelect(ps, preps, pt); ps.value = side.prep;
+      var l1 = el('label', 'ctl', 'Model'); l1.appendChild(ms); var l2 = el('label', 'ctl', 'Preprocessing'); l2.appendChild(ps); row.appendChild(l1); row.appendChild(l2);
+      ms.addEventListener('change', function () { side.model = ms.value; side.prep = null; renderCompare(); }); ps.addEventListener('change', function () { side.prep = ps.value; renderCompare(); });
+      var r = runsFor({ model: side.model, image: CP.image, preprocessing: side.prep, resolution: CP.res })[0];
+      if (!r) { p.appendChild(el('p', 'hint', 'No run for this combination.')); return; }
+      var M = LAB.models[r.model], IM = LAB.images[r.image];
+      p.appendChild(el('div', null)).innerHTML = (r.decoder_trained ? '' : '<span class="badge">decoder untrained</span> ') + (r.native ? '<span class="badge ok">native</span>' : '<span class="badge">cross-applied</span>') + ' <span class="mono">Dice ' + r.dice.toFixed(3) + ' · IoU ' + r.iou.toFixed(3) + ' · ' + fmtM(M.analytic[String(CP.res)] ? M.analytic[String(CP.res)].macs : M.totals.macs) + ' MACs</span>';
+      var views = el('div', 'views'); views.style.marginTop = '8px'; p.appendChild(views);
+      var mkV = function (cap) { var b = el('div', 'view-block'); var c = document.createElement('canvas'); c.className = 'view'; b.appendChild(c); b.appendChild(el('div', 'cap', cap)); views.appendChild(b); return c; };
+      var cOv = mkV('prediction vs truth'), cSal = mkV('saliency (mass region)');
+      Promise.all([loadImg(IM.thumbs[r.preprocessing]), loadImg(IM.gt[r.preprocessing]), loadImg(r.files.pred)]).then(function (im) { drawView(cOv, im[0], { gt: im[1], pred: im[2] }); if (r.saliency.gt_encoder) loadImg(r.saliency.gt_encoder).then(function (h) { drawView(cSal, im[0], { heat: h, gt: im[1] }); }); else drawView(cSal, im[0], {}); });
+      var s = r.stages.filter(function (x) { return x.key === CP.stage; })[0];
+      if (s) {
+        p.appendChild(el('h3', null, s.key + ' · ' + shp(s.shape)));
+        var tiles = el('div', 'tiles'); p.appendChild(tiles);
+        loadImg(s.sprite).then(function (sprite) { s.channels.slice(0, 8).forEach(function (ch, n) { var t = el('div', 'tile'); var cv = document.createElement('canvas'); cv.width = s.tile; cv.height = s.tile; cv.getContext('2d').drawImage(sprite, (n % s.cols) * s.tile, Math.floor(n / s.cols) * s.tile, s.tile, s.tile, 0, 0, s.tile, s.tile); t.appendChild(cv); t.appendChild(el('span', null, 'ch ' + ch.channel)); tiles.appendChild(t); }); });
+      }
+    });
+  }
+
+  /* ====================================================================
+     COMPUTE
+     ==================================================================== */
+  var CO = { model: modelKeys[0] };
+  function initCompute() {
+    var ress = LAB.meta.analytic_resolutions; $('co-res').max = ress.length - 1;
+    $('co-res').addEventListener('input', renderComputeTable);
+    fillSelect($('co-model'), modelKeys, modelTitle); $('co-model').addEventListener('change', function () { CO.model = this.value; renderComputeBars(); });
+    renderComputeTable(); renderComputeBars();
+  }
+  function renderComputeTable() {
+    var ress = LAB.meta.analytic_resolutions, res = ress[+$('co-res').value]; $('co-res-label').textContent = res + '×' + res;
+    $('co-rows').innerHTML = modelKeys.map(function (k) {
+      var M = LAB.models[k], A = M.analytic[String(res)] || {}, t256 = M.timing['256'], t512 = M.timing['512'];
+      return '<tr><td>' + M.title + (M.decoder_trained ? '' : ' <span class="badge">untrained decoder</span>') + '</td><td class="num">' + fmtM(M.totals.params) + '</td><td class="num">' + fmtM(M.totals.params_unused) + '</td><td class="num">' + fmtM(A.macs || 0) + '</td><td class="num">' + fmtB(A.activation_bytes_total || 0) + '</td><td class="num">' + fmtB(A.activation_bytes_largest || 0) + '</td><td class="num">' + fmtB(A.input_bytes ? A.input_bytes.uint8 : 0) + '</td><td class="num">' + fmtB(A.input_bytes ? A.input_bytes.float32 : 0) + '</td><td class="num">' + ms(t256 && t256.median_s) + '</td><td class="num">' + ms(t512 && t512.median_s) + '</td></tr>';
+    }).join('');
+    var anyT = LAB.models[modelKeys[0]].timing['256'] || LAB.models[modelKeys[0]].timing['512'];
+    $('co-machine').textContent = 'Latency: median of ' + (anyT ? anyT.runs : 5) + ' forward passes, batch 1, ' + (anyT ? anyT.threads + ' threads, ' : '') + LAB.meta.machine + '. MACs, activations and input bytes are exact for the slider resolution.';
+  }
+  function renderComputeBars() {
+    var M = LAB.models[CO.model], ress = LAB.meta.analytic_resolutions, res = ress[+$('co-res').value], A = M.analytic[String(res)] || { by_group: M.totals.by_group };
+    var stageMacs = {};
+    Object.keys(A.by_group).forEach(function (g) {
+      var key = 'encoder';
+      if (g.indexOf('decoder.blocks.') === 0) key = 'dec' + g.split('.')[2]; else if (g.indexOf('decoder') === 0) key = 'decoder'; else if (g.indexOf('segmentation_head') === 0) key = 'head';
+      else { Object.keys(M.encoder_groups).forEach(function (k) { if (M.encoder_groups[k].indexOf(g) >= 0) key = k; }); }
+      stageMacs[key] = (stageMacs[key] || 0) + A.by_group[g].macs;
+    });
+    var keys = Object.keys(stageMacs), total = keys.reduce(function (a, k) { return a + stageMacs[k]; }, 0), mx = Math.max.apply(null, keys.map(function (k) { return stageMacs[k]; }));
+    $('co-macs').innerHTML = keys.map(function (k) { return '<div class="bar-row"><span class="mono">' + k + '</span><div class="bar-track"><div class="bar-fill ' + (k.indexOf('dec') === 0 || k === 'head' ? 'dec' : '') + '" style="width:' + (100 * stageMacs[k] / mx) + '%"></div></div><span class="mono">' + fmtM(stageMacs[k]) + ' (' + (100 * stageMacs[k] / total).toFixed(0) + '%)</span></div>'; }).join('');
+    var T = M.timing[String(res)] || M.timing['256'] || M.timing[Object.keys(M.timing)[0]];
+    if (!T) { $('co-time').innerHTML = '<p class="hint">No timing at this resolution.</p>'; return; }
+    var st = T.stages, sk = Object.keys(st), smx = Math.max.apply(null, sk.map(function (k) { return st[k]; }));
+    $('co-time').innerHTML = sk.map(function (k) { return '<div class="bar-row"><span class="mono">' + k + '</span><div class="bar-track"><div class="bar-fill ' + (k.indexOf('dec') === 0 || k === 'head' ? 'dec' : '') + '" style="width:' + (100 * st[k] / smx) + '%"></div></div><span class="mono">' + ms(st[k]) + '</span></div>'; }).join('') + '<p class="hint">measured at ' + (M.timing[String(res)] ? res : Object.keys(M.timing)[0]) + '², whole pass ' + ms(T.median_s) + '</p>';
+  }
+
+  /* ---------- boot ---------- */
+  showTab(location.hash.slice(1) || 'anatomy');
+})();
+</script>
